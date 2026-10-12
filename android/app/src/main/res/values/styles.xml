@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+ <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar"><item name="colorPrimary">#193966</item><item name="colorPrimaryDark">#080f21</item><item name="colorAccent">#6b9fee</item><item name="android:windowLightStatusBar">false</item><item name="android:statusBarColor">#080f21</item><item name="android:navigationBarColor">#080f21</item><item name="android:windowLightNavigationBar">false</item></style>
+ <style name="AppTheme.NoActionBar" parent="AppTheme"><item name="windowActionBar">false</item><item name="windowNoTitle">true</item><item name="android:background">@null</item></style>
+ <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen"><item name="windowSplashScreenBackground">#080f21</item><item name="windowSplashScreenAnimatedIcon">@drawable/ilslides_icon</item><item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item></style>
+</resources>
