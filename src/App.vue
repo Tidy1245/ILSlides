@@ -2,8 +2,11 @@
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
-import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, RefreshCw, Trash2, ChevronRight, Expand, Grid2X2 } from 'lucide-vue-next'
-import { Folders, loadCollections, sortedPhotos, nextIndex, type Collection, type Photo } from './library'
+import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, RefreshCw, Trash2, ChevronRight, Expand, Grid2X2, Check } from 'lucide-vue-next'
+import { Folders, loadCollections, loadFolders, uniquePhotos, sortedPhotos, nextIndex, type Collection, type Photo, type SourceFolder } from './library'
+import PhotoThumb from './PhotoThumb.vue'
+import { version } from '../package.json'
+const folders = ref(loadFolders())
 const collections = ref(loadCollections())
 const active = ref<Collection | null>(null)
 const photos = ref<Photo[]>([])
@@ -17,9 +20,13 @@ const error = ref('')
 const modal = ref(false)
 const editId = ref<string | null>(null)
 const name = ref('')
-const selectedFolder = ref<{uri:string;name:string} | null>(null)
+const selectedFolder = ref<SourceFolder | null>(null)
+const folderPhotos = ref<Photo[]>([])
+const draftPhotos = ref<Photo[]>([])
+const folderBusy = ref(false)
+let folderRequest = 0
 const controls = ref(true)
-const total = computed(() => collections.value.reduce((sum,c) => sum + (c.count || 0), 0))
+const total = computed(() => collections.value.reduce((sum,c) => sum + c.photos.length, 0))
 const current = computed(() => photos.value[index.value])
 const cache = new Map<string,string>()
 let request = 0
@@ -29,6 +36,9 @@ watch(collections, value => {
   try { localStorage.setItem('ilslides.collections', JSON.stringify(value)) }
   catch { error.value = '儲存空間不足，集合設定無法保存。' }
 }, { deep:true })
+watch(folders, value => {
+  try { localStorage.setItem('ilslides.folders', JSON.stringify(value)) } catch { error.value='資料夾捷徑無法保存。' }
+}, {deep:true, immediate:true})
 function message(e: unknown) { return e instanceof Error ? e.message : String(e) }
 async function image(uri:string, size=2048) {
   const key = `${uri}:${size}`
@@ -57,42 +67,58 @@ async function show() {
 }
 watch(index, show)
 async function cover(c:Collection) {
-  try { const {images} = await Folders.list({tree:c.tree}); c.count=images.length; const first=sortedPhotos(images)[0]; if(first) covers.value[c.id]=await image(first.uri,600); else delete covers.value[c.id] }
-  catch { /* Collection can be re-authorized from its edit sheet. */ }
+  delete covers.value[c.id]
+  for(const p of c.photos) {
+    try { covers.value[c.id]=await image(p.uri,600); return } catch { /* Try the next selected image. */ }
+  }
 }
 async function open(c:Collection) {
   if(busy.value) return
+  if(c.legacyTree) { error.value='舊集合尚未完成轉換，請編輯並選取要保留的圖片。'; return }
   busy.value=true; error.value=''
-  try {
-    const result=await Folders.list({tree:c.tree})
-    cache.clear(); photos.value=sortedPhotos(result.images); c.count=photos.value.length
-    index.value=0; displayed.value=''; active.value=c; controls.value=true
-    await show()
-  } catch(e) { error.value=`無法開啟目錄，請編輯集合並重新選擇目錄。${message(e)}` }
-  finally { busy.value=false }
+  cache.clear(); photos.value=[...c.photos]
+  index.value=0; displayed.value=''; active.value=c; controls.value=true
+  try { await show() } finally { busy.value=false }
 }
 function close() { ++request; active.value=null; photos.value=[]; displayed.value=''; imageBusy.value=false }
 function step(delta:number) { if(photos.value.length > 1) { error.value=''; index.value=nextIndex(index.value,delta,photos.value.length) } }
 function start(e:TouchEvent) { touchX=e.changedTouches[0]!.clientX; touchY=e.changedTouches[0]!.clientY }
 function end(e:TouchEvent) { const dx=e.changedTouches[0]!.clientX-touchX,dy=e.changedTouches[0]!.clientY-touchY; if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.3) step(dx<0?1:-1) }
-function edit(c?:Collection) { editId.value=c?.id || null; name.value=c?.name || ''; selectedFolder.value=c?{uri:c.tree,name:c.folder}:null; modal.value=true; error.value='' }
+function edit(c?:Collection, folder?:SourceFolder) {
+  editId.value=c?.id || null; name.value=c?.name || ''; draftPhotos.value=c ? [...c.photos] : []
+  selectedFolder.value=null; folderPhotos.value=[]; modal.value=true; error.value=''
+  const initial=folder || folders.value[0]
+  if(initial) void browseFolder(initial)
+}
+async function browseFolder(folder:SourceFolder) {
+  const token=++folderRequest
+  selectedFolder.value=folder; folderPhotos.value=[]; folderBusy.value=true; error.value=''
+  try { const result=await Folders.list({tree:folder.uri}); if(token===folderRequest) folderPhotos.value=sortedPhotos(result.images) }
+  catch(e) { if(token===folderRequest) error.value=`無法讀取資料夾，請重新授權此目錄。${message(e)}` }
+  finally { if(token===folderRequest) folderBusy.value=false }
+}
 async function pick() {
   if(!Capacitor.isNativePlatform()) { error.value='請安裝 Android APK，使用系統目錄選擇器讀取手機圖片。'; return }
-  try { const result=await Folders.pick(); if(!result.cancelled) { selectedFolder.value=result; if(!name.value.trim()) name.value=result.name } }
-  catch(e) { error.value=`無法選擇目錄：${message(e)}` }
-}
-async function save() {
-  if(!name.value.trim() || !selectedFolder.value || busy.value) return
-  busy.value=true; error.value=''
   try {
-    const result=await Folders.list({tree:selectedFolder.value.uri})
-    const c:Collection={id:editId.value || crypto.randomUUID(),name:name.value.trim(),tree:selectedFolder.value.uri,folder:selectedFolder.value.name,count:result.images.length}
-    const pos=collections.value.findIndex(v=>v.id===c.id)
-    if(pos<0) collections.value.push(c); else collections.value[pos]=c
-    if(active.value?.id===c.id) { active.value=c; photos.value=sortedPhotos(result.images); index.value=0; await show() }
-    modal.value=false; void cover(c)
-  } catch(e) { error.value=`無法讀取此目錄：${message(e)}` }
-  finally { busy.value=false }
+    const result=await Folders.pick()
+    if(result.cancelled) return
+    const folder={uri:result.uri,name:result.name}
+    const pos=folders.value.findIndex(f=>f.uri===folder.uri)
+    if(pos<0) folders.value.push(folder); else folders.value[pos]=folder
+    await browseFolder(folder)
+  } catch(e) { error.value=`無法選擇目錄：${message(e)}` }
+}
+function selected(uri:string) { return draftPhotos.value.some(p=>p.uri===uri) }
+function toggle(p:Photo) { draftPhotos.value=selected(p.uri) ? draftPhotos.value.filter(v=>v.uri!==p.uri) : [...draftPhotos.value,p] }
+function selectAll() { draftPhotos.value=uniquePhotos([...draftPhotos.value,...folderPhotos.value]) }
+async function save() {
+  if(!name.value.trim() || !draftPhotos.value.length || busy.value) return
+  const c:Collection={id:editId.value || crypto.randomUUID(),name:name.value.trim(),photos:uniquePhotos(draftPhotos.value)}
+  const pos=collections.value.findIndex(v=>v.id===c.id)
+  if(pos<0) collections.value.push(c); else collections.value[pos]=c
+  modal.value=false; ++folderRequest
+  if(active.value?.id===c.id) { active.value=c; photos.value=[...c.photos]; index.value=0; await show() }
+  void cover(c)
 }
 const deleting = ref(false)
 function remove() {
@@ -102,14 +128,20 @@ function remove() {
   if(active.value?.id===editId.value) close()
   modal.value=false; deleting.value=false
 }
-watch(modal, () => deleting.value=false)
+watch(modal, () => { deleting.value=false; if(!modal.value) { ++folderRequest; folderBusy.value=false } })
 function keyboard(e:KeyboardEvent) { if(modal.value) { if(e.key==='Escape') modal.value=false; return }; if(active.value) { if(e.key==='ArrowRight') step(1); if(e.key==='ArrowLeft') step(-1); if(e.key==='Escape') close() } }
 onMounted(async () => {
   window.addEventListener('keydown',keyboard)
   if(Capacitor.isNativePlatform()) {
     const listener=await NativeApp.addListener('backButton', () => { if(modal.value) modal.value=false; else if(active.value) close(); else void NativeApp.exitApp() })
     removeBack=()=>void listener.remove()
-    for(const c of collections.value) await cover(c)
+        for(const c of collections.value) {
+      if(c.legacyTree) {
+        try { const result=await Folders.list({tree:c.legacyTree}); c.photos=sortedPhotos(result.images); delete c.legacyTree }
+        catch { error.value='部分舊集合無法轉換，請編輯集合重新選取圖片。' }
+      }
+      await cover(c)
+    }
   }
 })
 onUnmounted(() => { window.removeEventListener('keydown',keyboard); removeBack?.() })
@@ -120,27 +152,42 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); removeBack?.
     <header class="topbar"><a class="brand" href="#" aria-label="ILSlides 首頁"><span class="brand-icon"><Images :size="21" /></span>ILSlides<span class="brand-dot"></span></a><span class="local-badge">本機相片庫</span></header>
     <section class="intro"><div class="eyebrow">YOUR MOMENTS, TOGETHER</div><h1>收藏每一個<span>值得回看的瞬間。</span></h1><p>把喜歡的照片，整理成你的專屬集合。</p></section>
     <section class="stats"><div><strong>{{ collections.length.toString().padStart(2,'0') }}</strong><span>圖片集合</span></div><div class="stat-divider"></div><div><strong>{{ total.toLocaleString() }}</strong><span>張照片</span></div><span class="offline"><span></span>僅在裝置上讀取</span></section>
-    <div class="section-heading"><div><h2>我的集合 <span>{{ collections.length }}</span></h2><p>一個目錄，一段回憶</p></div><button class="add-button" @click="edit()"><Plus :size="18" />新增集合</button></div>
+    <section class="source-section"><div class="source-heading"><span><FolderOpen :size="15" />常用資料夾</span><button @click="edit()">管理／挑選圖片<ChevronRight :size="15" /></button></div><div class="folder-chips"><button v-for="f in folders" :key="f.uri" @click="edit(undefined,f)"><FolderOpen :size="14" />{{ f.name }}</button><button v-if="!folders.length" @click="edit()"><Plus :size="14" />記住圖片資料夾</button></div></section>
+    <div class="section-heading"><div><h2>我的集合 <span>{{ collections.length }}</span></h2><p>挑選喜歡的照片，組成你的故事</p></div><button class="add-button" @click="edit()"><Plus :size="18" />新增集合</button></div>
     <section v-if="collections.length" class="collection-grid">
       <article v-for="(c,i) in collections" :key="c.id" class="collection-card">
-        <button class="card-open" @click="open(c)" :disabled="busy" :aria-label="`開啟 ${c.name}`"><div class="cover" :class="`cover-${i%3}`"><img v-if="covers[c.id]" :src="covers[c.id]" alt="" /><div v-else class="cover-placeholder"><Images :size="38" :stroke-width="1" /></div><span class="photo-count"><Images :size="13" />{{ c.count }} 張</span><span class="open-indicator"><ChevronRight :size="20" /></span></div><div class="card-copy"><h3>{{ c.name }}</h3><p><FolderOpen :size="13" />{{ c.folder }}</p></div></button>
+        <button class="card-open" @click="open(c)" :disabled="busy" :aria-label="`開啟 ${c.name}`"><div class="cover" :class="`cover-${i%3}`"><img v-if="covers[c.id]" :src="covers[c.id]" alt="" /><div v-else class="cover-placeholder"><Images :size="38" :stroke-width="1" /></div><span class="photo-count"><Images :size="13" />{{ c.photos.length }} 張</span><span class="open-indicator"><ChevronRight :size="20" /></span></div><div class="card-copy"><h3>{{ c.name }}</h3><p><FolderOpen :size="13" />已挑選的照片</p></div></button>
         <button class="card-edit icon-button" @click="edit(c)" :aria-label="`編輯 ${c.name}`"><Pencil :size="16" /></button>
       </article>
       <button class="new-card" @click="edit()"><span><Plus :size="26" /></span><strong>新的故事</strong><small>新增你的圖片集合</small></button>
     </section>
-    <section v-else class="empty-card"><div class="empty-art"><div class="art-frame back"></div><div class="art-frame front"><Images :size="48" :stroke-width="1" /><span class="art-spark">✦</span></div></div><h2>你的回憶，從這裡開始</h2><p>選擇手機上的圖片目錄，<br />建立第一個專屬集合。</p><button class="primary" @click="edit()"><FolderOpen :size="18" />選擇目錄，建立集合</button><span class="empty-note">照片保留在原目錄，無需上傳</span></section>
+    <section v-else class="empty-card"><div class="empty-art"><div class="art-frame back"></div><div class="art-frame front"><Images :size="48" :stroke-width="1" /><span class="art-spark">✦</span></div></div><h2>你的回憶，從這裡開始</h2><p>從記住的資料夾挑選多張照片，<br />建立第一個專屬集合。</p><button class="primary" @click="edit()"><FolderOpen :size="18" />挑選圖片，建立集合</button><span class="empty-note">照片保留在原目錄，無需上傳</span></section>
     <footer><span class="footer-line"></span>留一點空間，給美好的日常<span class="footer-line"></span></footer>
-    <div class="bottom-bar"><span><Grid2X2 :size="20" />我的集合</span><span class="version">ILSlides · 1.0.0</span></div>
+    <div class="bottom-bar"><span><Grid2X2 :size="20" />我的集合</span><span class="version">ILSlides · {{ version }}</span></div>
   </main>
   <main v-else class="viewer" @touchstart.passive="start" @touchend.passive="end">
     <header class="viewer-header" :class="{hidden:!controls}"><button class="icon-button" @click="close()" aria-label="返回集合"><ArrowLeft /></button><div><h2>{{ active.name }}</h2><span>{{ photos.length ? index+1 : 0 }} / {{ photos.length }}</span></div><button class="icon-button" @click="edit(active)" aria-label="編輯集合"><Pencil :size="20" /></button></header>
-    <div class="image-stage" @click="controls=!controls"><Transition name="dissolve"><img v-if="displayed" :key="displayed" :src="displayed" :alt="displayedName" class="main-photo" /></Transition><span v-if="imageBusy" class="loading-indicator">讀取中</span><div v-if="!photos.length" class="viewer-empty"><Images :size="40" /><h2>目錄中還沒有圖片</h2><p>加入圖片後，點擊重新讀取。</p><button class="primary" @click.stop="open(active)"><RefreshCw :size="18" />重新讀取</button></div></div>
+    <div class="image-stage" @click="controls=!controls"><Transition name="dissolve"><img v-if="displayed" :key="displayed" :src="displayed" :alt="displayedName" class="main-photo" /></Transition><span v-if="imageBusy" class="loading-indicator">讀取中</span><div v-if="!photos.length" class="viewer-empty"><Images :size="40" /><h2>集合中還沒有圖片</h2><p>編輯集合並挑選要加入的圖片。</p><button class="primary" @click.stop="edit(active)"><Plus :size="18" />挑選圖片</button></div></div>
     <div class="viewer-bottom" :class="{hidden:!controls}"><p class="filename">{{ current?.name }}</p><div class="viewer-actions"><button class="icon-button" @click="step(-1)" :disabled="photos.length<2" aria-label="上一張"><ArrowLeft /></button><div class="swipe-hint">左右滑動瀏覽<span>淡入 · 淡出</span></div><button class="icon-button" @click="step(1)" :disabled="photos.length<2" aria-label="下一張"><ArrowRight /></button></div><div class="viewer-tools"><button @click="open(active)" :disabled="busy"><RefreshCw :size="16" />重新讀取</button><button @click="controls=false"><Expand :size="16" />沉浸瀏覽</button></div></div>
   </main>
   <div v-if="error" class="toast" role="alert"><span>{{ error }}</span><button @click="error=''" aria-label="關閉訊息"><X :size="18" /></button></div>
-  <div v-if="modal" class="modal-backdrop" @click.self="modal=false"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><div class="sheet-handle"></div><div class="sheet-heading"><div><span class="eyebrow">CURATE YOUR COLLECTION</span><h2 id="sheet-title">{{ editId ? '編輯集合' : '建立新的集合' }}</h2></div><button class="icon-button" @click="modal=false" aria-label="關閉"><X :size="21" /></button></div><label class="field-label" for="collection-name">集合名稱</label><input id="collection-name" v-model="name" maxlength="60" placeholder="例如：旅行片刻、日常光影" @keydown.enter="save" /><label class="field-label">圖片來源</label><button class="folder-select" @click="pick" :disabled="busy"><span class="folder-symbol"><FolderOpen :size="23" /></span><span><strong>{{ selectedFolder?.name || '選擇裝置目錄' }}</strong><small>{{ selectedFolder ? '點擊重新選擇目錄' : '讀取此目錄內的圖片' }}</small></span><ChevronRight :size="18" /></button><p class="sheet-note">只讀取所選目錄的圖片，不移動或修改原始檔案。<br />支援 JPG、PNG、WebP、GIF、HEIC 等裝置可解碼格式。</p><button class="primary save-button" :disabled="!name.trim() || !selectedFolder || busy" @click="save">{{ busy ? '讀取目錄中…' : editId ? '儲存變更' : '建立集合' }}<ArrowRight :size="18" /></button><template v-if="editId"><button v-if="!deleting" class="delete-button" @click="deleting=true"><Trash2 :size="16" />移除集合</button><div v-else class="delete-confirm"><p>確定移除集合？原始圖片會保留。</p><button @click="deleting=false">取消</button><button class="danger" @click="remove">確定移除</button></div></template></section></div>
+  <div v-if="modal" class="modal-backdrop" @click.self="modal=false">
+    <section class="sheet collection-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="sheet-handle"></div><div class="sheet-heading"><div><span class="eyebrow">CURATE YOUR COLLECTION</span><h2 id="sheet-title">{{ editId ? '編輯集合' : '建立新的集合' }}</h2></div><button class="icon-button" @click="modal=false" aria-label="關閉"><X :size="21" /></button></div>
+      <div class="editor-scroll">
+        <label class="field-label" for="collection-name">集合名稱</label><input id="collection-name" v-model="name" maxlength="60" placeholder="例如：旅行片刻、日常光影" />
+        <label class="field-label">常用資料夾</label>
+        <div class="folder-chips"><button v-for="f in folders" :key="f.uri" :class="{chosen:selectedFolder?.uri===f.uri}" @click="browseFolder(f)"><FolderOpen :size="14" />{{ f.name }}</button></div>
+        <button class="folder-select" @click="pick" :disabled="folderBusy"><span class="folder-symbol"><FolderOpen :size="23" /></span><span><strong>選擇／重新授權資料夾</strong><small>記住此位置，下次可直接開啟挑圖</small></span><Plus :size="18" /></button>
+        <div v-if="draftPhotos.length" class="selection-summary"><div class="picker-heading"><span>已選 {{ draftPhotos.length }} 張（點擊可移除）</span><button @click="draftPhotos=[]">清空選取</button></div><div class="selected-strip"><button v-for="p in draftPhotos" :key="p.uri" @click="toggle(p)" :aria-label="`移除已選 ${p.name}`"><PhotoThumb :uri="p.uri" :name="p.name" /><span>{{ p.name }}</span><X :size="13" /></button></div></div>
+        <div class="picker-heading"><span>{{ selectedFolder?.name || '選擇資料夾後開始挑圖' }}</span><button v-if="folderPhotos.length" @click="selectAll">全選此資料夾</button></div>
+        <p v-if="folderBusy" class="picker-empty">正在讀取資料夾…</p><p v-else-if="selectedFolder && !folderPhotos.length" class="picker-empty">沒有可讀取的圖片；可選擇其他資料夾。</p>
+        <div class="photo-picker"><button v-for="p in folderPhotos" :key="p.uri" class="pick-photo" :class="{selected:selected(p.uri)}" @click="toggle(p)" :aria-label="`選取 ${p.name}`" :aria-pressed="selected(p.uri)"><PhotoThumb :uri="p.uri" :name="p.name" /><span class="pick-check"><Check v-if="selected(p.uri)" :size="15" /></span><span class="pick-name">{{ p.name }}</span></button></div>
+        <p class="sheet-note">可切換資料夾繼續挑選；集合只保留你勾選的圖片。<br />資料夾新增圖片不會自動加入集合，原始檔案不會修改。</p>
+        <template v-if="editId"><button v-if="!deleting" class="delete-button" @click="deleting=true"><Trash2 :size="16" />移除集合</button><div v-else class="delete-confirm"><p>確定移除集合？原始圖片會保留。</p><button @click="deleting=false">取消</button><button class="danger" @click="remove">確定移除</button></div></template>
+      </div>
+      <button class="primary save-button" :disabled="!name.trim() || !draftPhotos.length || busy" @click="save">{{ editId ? '儲存變更' : '建立集合' }} · {{ draftPhotos.length }} 張<ArrowRight :size="18" /></button>
+    </section>
+  </div>
 </template>
-
-
-
 
