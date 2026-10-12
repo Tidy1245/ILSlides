@@ -2,7 +2,7 @@ import type { CoverSettings } from './cover'
 import { registerPlugin } from '@capacitor/core'
 export interface Photo { uri: string; name: string }
 export interface SourceFolder { uri: string; name: string }
-export interface Collection { id: string; name: string; photos: Photo[]; legacyTree?: string; cover?:CoverSettings }
+export interface Collection { id: string; name: string; photos: Photo[]; legacyTree?: string; cover?:CoverSettings; createdAt?:number; updatedAt?:number }
 export const Folders = registerPlugin<{
   pick(): Promise<{ uri: string; name: string; cancelled?: boolean }>
   list(options: { tree: string }): Promise<{ images: Photo[] }>
@@ -23,7 +23,7 @@ function read(key: string): unknown[] {
 function validPhoto(p: any): p is Photo { return p && typeof p.uri === 'string' && typeof p.name === 'string' }
 export function loadCollections(): Collection[] {
   return read('ilslides.collections').filter((c:any) => c && typeof c.id==='string' && typeof c.name==='string').map((c:any) => ({
-    id:c.id, name:c.name, ...((c.cover && typeof c.cover.uri === 'string' && [c.cover.x,c.cover.y,c.cover.zoom].every(Number.isFinite) && Array.isArray(c.photos) && c.photos.some((p:any)=>p?.uri===c.cover.uri)) ? {cover:c.cover} : {}), photos:Array.isArray(c.photos) ? uniquePhotos(c.photos.filter(validPhoto)) : [],
+    id:c.id, name:c.name, ...(Number.isFinite(c.createdAt) && c.createdAt>0 ? {createdAt:c.createdAt} : {}), ...(Number.isFinite(c.updatedAt) && c.updatedAt>0 ? {updatedAt:c.updatedAt} : {}), ...((c.cover && typeof c.cover.uri === 'string' && [c.cover.x,c.cover.y,c.cover.zoom].every(Number.isFinite) && Array.isArray(c.photos) && c.photos.some((p:any)=>p?.uri===c.cover.uri)) ? {cover:c.cover} : {}), photos:Array.isArray(c.photos) ? uniquePhotos(c.photos.filter(validPhoto)) : [],
     ...((c.legacyTree || (!Array.isArray(c.photos) && c.tree)) ? {legacyTree:c.legacyTree || c.tree} : {})
   }))
 }
