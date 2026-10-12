@@ -4,7 +4,7 @@
 
 ## 安裝
 
-前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-1.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
+前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-2.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
 
 ## 使用方式
 
@@ -13,7 +13,9 @@
 3. 在縮圖上勾選多張圖片；可切換其他資料夾繼續勾選，或全選目前資料夾。
 4. 點「建立集合」。集合只包含已勾選圖片，依挑選順序瀏覽。
 5. 打開集合，左右滑動／點箭頭瀏覽，點畫面或「沉浸瀏覽」隱藏操作列。
-6. 編輯集合可改名、增加圖片、取消勾選或移除集合；取消編輯不變更已存集合。
+6. 編輯集合可改名、增加圖片、取消勾選；底部固定「刪除集合」鍵，確認後只刪集合設定。
+7. 點「選擇封面與調整視窗」，從集合選一張圖片，在 4:3 視窗拖曳位置及縮放 1～3 倍；點「使用此封面」再儲存集合。取消調整不變更封面。封面圖片移出集合後回退至集合第一張。
+8. 首頁使用「搜尋集合」按名稱即時篩選，可清除搜尋；首頁四行介紹文字已移除。
 
 常用資料夾是找圖捷徑，集合是獨立的圖片清單。同一張圖片可加入不同集合。資料夾新增圖片不會自動加入既有集合；「重新讀取」只重載集合已選圖片。
 
@@ -48,7 +50,7 @@ SDK 位置由 `android/local.properties` 設定（不提交）。完整 APK 建�
 **每次發布預設自動遞增 patch 一碼；使用者明確指定時採指定版號。** 發布前執行一次：
 
 ```powershell
-npm run release:prepare          # 例如 1.0.1 → 1.0.2
+npm run release:prepare          # 例如 1.0.2 → 1.0.3
 npm run release:prepare -- 2.0.0 # 明確指定
 ```
 
@@ -56,10 +58,10 @@ npm run release:prepare -- 2.0.0 # 明確指定
 
 UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
 
-## v1.0.1 驗證
+## v1.0.2 驗證
 
-- 型別檢查、正式建置、6 項單元測試通過。
-- 手機 UI 測試涵蓋多選、常用資料夾重用、集合互不影響、資料夾新增圖片不自動加入、跨資料夾選圖、改名／增減／保存／刪除與舊版轉換。
+- 型別檢查、正式建置、11 項單元測試通過。
+- 手機 UI 測試涵蓋封面選圖／拖曳／縮放／取消／重開保存、搜尋及無結果、固定刪除鍵，以及多選與舊版轉換等既有行為。
 - Android APK 建置與 lint 通過；APK 簽章與 SHA-256 驗證。
 - 此次未連接 Android 實機，目錄持久授權與裝置圖片解碼仍需實機確認。
 
@@ -70,3 +72,7 @@ UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke
 | 選圖建立集合 | 集合首頁 |
 | --- | --- |
 | ![選圖](docs/create.png) | ![首頁](docs/collections.png) |
+
+封面裁切操作：
+
+![封面調整](docs/cover-editor.png)

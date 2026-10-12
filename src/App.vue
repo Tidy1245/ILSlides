@@ -2,9 +2,11 @@
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
-import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, RefreshCw, Trash2, ChevronRight, Expand, Grid2X2, Check } from 'lucide-vue-next'
+import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, RefreshCw, Trash2, ChevronRight, Expand, Grid2X2, Check, Search } from 'lucide-vue-next'
 import { Folders, loadCollections, loadFolders, uniquePhotos, sortedPhotos, nextIndex, type Collection, type Photo, type SourceFolder } from './library'
 import PhotoThumb from './PhotoThumb.vue'
+import CoverEditor from './CoverEditor.vue'
+import { drawCover, type CoverSettings } from './cover'
 import { version } from '../package.json'
 const folders = ref(loadFolders())
 const collections = ref(loadCollections())
@@ -14,6 +16,10 @@ const index = ref(0)
 const displayed = ref('')
 const displayedName = ref('')
 const covers = ref<Record<string,string>>({})
+const query = ref('')
+const filteredCollections = computed(() => collections.value.filter(c => c.name.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase())))
+const draftCover = ref<CoverSettings>()
+const coverEditor = ref(false)
 const busy = ref(false)
 const imageBusy = ref(false)
 const error = ref('')
@@ -68,6 +74,13 @@ async function show() {
 watch(index, show)
 async function cover(c:Collection) {
   delete covers.value[c.id]
+  if(c.cover && c.photos.some(p=>p.uri===c.cover?.uri)) {
+    try {
+      const data=await image(c.cover.uri,1600), img=new Image(); img.src=data; await img.decode()
+      const canvas=document.createElement('canvas'); drawCover(canvas,img,c.cover)
+      covers.value[c.id]=canvas.toDataURL('image/webp',.88); return
+    } catch { /* Fall back if the chosen source file is unavailable. */ }
+  }
   for(const p of c.photos) {
     try { covers.value[c.id]=await image(p.uri,600); return } catch { /* Try the next selected image. */ }
   }
@@ -86,6 +99,7 @@ function start(e:TouchEvent) { touchX=e.changedTouches[0]!.clientX; touchY=e.cha
 function end(e:TouchEvent) { const dx=e.changedTouches[0]!.clientX-touchX,dy=e.changedTouches[0]!.clientY-touchY; if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.3) step(dx<0?1:-1) }
 function edit(c?:Collection, folder?:SourceFolder) {
   editId.value=c?.id || null; name.value=c?.name || ''; draftPhotos.value=c ? [...c.photos] : []
+  draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false
   selectedFolder.value=null; folderPhotos.value=[]; modal.value=true; error.value=''
   const initial=folder || folders.value[0]
   if(initial) void browseFolder(initial)
@@ -113,7 +127,7 @@ function toggle(p:Photo) { draftPhotos.value=selected(p.uri) ? draftPhotos.value
 function selectAll() { draftPhotos.value=uniquePhotos([...draftPhotos.value,...folderPhotos.value]) }
 async function save() {
   if(!name.value.trim() || !draftPhotos.value.length || busy.value) return
-  const c:Collection={id:editId.value || crypto.randomUUID(),name:name.value.trim(),photos:uniquePhotos(draftPhotos.value)}
+  const c:Collection={id:editId.value || crypto.randomUUID(),name:name.value.trim(),photos:uniquePhotos(draftPhotos.value),...(draftCover.value && selected(draftCover.value.uri) ? {cover:{...draftCover.value}} : {})}
   const pos=collections.value.findIndex(v=>v.id===c.id)
   if(pos<0) collections.value.push(c); else collections.value[pos]=c
   modal.value=false; ++folderRequest
@@ -129,11 +143,11 @@ function remove() {
   modal.value=false; deleting.value=false
 }
 watch(modal, () => { deleting.value=false; if(!modal.value) { ++folderRequest; folderBusy.value=false } })
-function keyboard(e:KeyboardEvent) { if(modal.value) { if(e.key==='Escape') modal.value=false; return }; if(active.value) { if(e.key==='ArrowRight') step(1); if(e.key==='ArrowLeft') step(-1); if(e.key==='Escape') close() } }
+function keyboard(e:KeyboardEvent) { if(coverEditor.value) { if(e.key==='Escape') coverEditor.value=false; return }; if(modal.value) { if(e.key==='Escape') modal.value=false; return }; if(active.value) { if(e.key==='ArrowRight') step(1); if(e.key==='ArrowLeft') step(-1); if(e.key==='Escape') close() } }
 onMounted(async () => {
   window.addEventListener('keydown',keyboard)
   if(Capacitor.isNativePlatform()) {
-    const listener=await NativeApp.addListener('backButton', () => { if(modal.value) modal.value=false; else if(active.value) close(); else void NativeApp.exitApp() })
+    const listener=await NativeApp.addListener('backButton', () => { if(coverEditor.value) coverEditor.value=false; else if(modal.value) modal.value=false; else if(active.value) close(); else void NativeApp.exitApp() })
     removeBack=()=>void listener.remove()
         for(const c of collections.value) {
       if(c.legacyTree) {
@@ -150,18 +164,19 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); removeBack?.
 <template>
   <main v-if="!active" class="library">
     <header class="topbar"><a class="brand" href="#" aria-label="ILSlides 首頁"><span class="brand-icon"><Images :size="21" /></span>ILSlides<span class="brand-dot"></span></a><span class="local-badge">本機相片庫</span></header>
-    <section class="intro"><div class="eyebrow">YOUR MOMENTS, TOGETHER</div><h1>收藏每一個<span>值得回看的瞬間。</span></h1><p>把喜歡的照片，整理成你的專屬集合。</p></section>
     <section class="stats"><div><strong>{{ collections.length.toString().padStart(2,'0') }}</strong><span>圖片集合</span></div><div class="stat-divider"></div><div><strong>{{ total.toLocaleString() }}</strong><span>張照片</span></div><span class="offline"><span></span>僅在裝置上讀取</span></section>
     <section class="source-section"><div class="source-heading"><span><FolderOpen :size="15" />常用資料夾</span><button @click="edit()">管理／挑選圖片<ChevronRight :size="15" /></button></div><div class="folder-chips"><button v-for="f in folders" :key="f.uri" @click="edit(undefined,f)"><FolderOpen :size="14" />{{ f.name }}</button><button v-if="!folders.length" @click="edit()"><Plus :size="14" />記住圖片資料夾</button></div></section>
     <div class="section-heading"><div><h2>我的集合 <span>{{ collections.length }}</span></h2><p>挑選喜歡的照片，組成你的故事</p></div><button class="add-button" @click="edit()"><Plus :size="18" />新增集合</button></div>
+    <div class="collection-search"><Search :size="18" /><input v-model="query" type="search" aria-label="搜尋集合" placeholder="搜尋集合名稱" /><button v-if="query" @click="query=''" aria-label="清除搜尋"><X :size="18" /></button></div>
+    <p v-if="collections.length && !filteredCollections.length" class="search-empty">找不到符合「{{ query }}」的集合。</p>
     <section v-if="collections.length" class="collection-grid">
-      <article v-for="(c,i) in collections" :key="c.id" class="collection-card">
+      <article v-for="(c,i) in filteredCollections" :key="c.id" class="collection-card">
         <button class="card-open" @click="open(c)" :disabled="busy" :aria-label="`開啟 ${c.name}`"><div class="cover" :class="`cover-${i%3}`"><img v-if="covers[c.id]" :src="covers[c.id]" alt="" /><div v-else class="cover-placeholder"><Images :size="38" :stroke-width="1" /></div><span class="photo-count"><Images :size="13" />{{ c.photos.length }} 張</span><span class="open-indicator"><ChevronRight :size="20" /></span></div><div class="card-copy"><h3>{{ c.name }}</h3><p><FolderOpen :size="13" />已挑選的照片</p></div></button>
         <button class="card-edit icon-button" @click="edit(c)" :aria-label="`編輯 ${c.name}`"><Pencil :size="16" /></button>
       </article>
       <button class="new-card" @click="edit()"><span><Plus :size="26" /></span><strong>新的故事</strong><small>新增你的圖片集合</small></button>
     </section>
-    <section v-else class="empty-card"><div class="empty-art"><div class="art-frame back"></div><div class="art-frame front"><Images :size="48" :stroke-width="1" /><span class="art-spark">✦</span></div></div><h2>你的回憶，從這裡開始</h2><p>從記住的資料夾挑選多張照片，<br />建立第一個專屬集合。</p><button class="primary" @click="edit()"><FolderOpen :size="18" />挑選圖片，建立集合</button><span class="empty-note">照片保留在原目錄，無需上傳</span></section>
+    <section v-if="!collections.length" class="empty-card"><div class="empty-art"><div class="art-frame back"></div><div class="art-frame front"><Images :size="48" :stroke-width="1" /><span class="art-spark">✦</span></div></div><h2>你的回憶，從這裡開始</h2><p>從記住的資料夾挑選多張照片，<br />建立第一個專屬集合。</p><button class="primary" @click="edit()"><FolderOpen :size="18" />挑選圖片，建立集合</button><span class="empty-note">照片保留在原目錄，無需上傳</span></section>
     <footer><span class="footer-line"></span>留一點空間，給美好的日常<span class="footer-line"></span></footer>
     <div class="bottom-bar"><span><Grid2X2 :size="20" />我的集合</span><span class="version">ILSlides · {{ version }}</span></div>
   </main>
@@ -176,6 +191,7 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); removeBack?.
       <div class="sheet-handle"></div><div class="sheet-heading"><div><span class="eyebrow">CURATE YOUR COLLECTION</span><h2 id="sheet-title">{{ editId ? '編輯集合' : '建立新的集合' }}</h2></div><button class="icon-button" @click="modal=false" aria-label="關閉"><X :size="21" /></button></div>
       <div class="editor-scroll">
         <label class="field-label" for="collection-name">集合名稱</label><input id="collection-name" v-model="name" maxlength="60" placeholder="例如：旅行片刻、日常光影" />
+        <label class="field-label">集合封面</label><button class="folder-select" :disabled="!draftPhotos.length" @click="coverEditor=true"><Images :size="23" /><span><strong>{{ draftCover && selected(draftCover.uri) ? '調整已選封面' : '選擇封面與調整視窗' }}</strong><small>從集合圖片挑選，拖曳及縮放封面範圍</small></span><ChevronRight :size="18" /></button>
         <label class="field-label">常用資料夾</label>
         <div class="folder-chips"><button v-for="f in folders" :key="f.uri" :class="{chosen:selectedFolder?.uri===f.uri}" @click="browseFolder(f)"><FolderOpen :size="14" />{{ f.name }}</button></div>
         <button class="folder-select" @click="pick" :disabled="folderBusy"><span class="folder-symbol"><FolderOpen :size="23" /></span><span><strong>選擇／重新授權資料夾</strong><small>記住此位置，下次可直接開啟挑圖</small></span><Plus :size="18" /></button>
@@ -184,10 +200,11 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); removeBack?.
         <p v-if="folderBusy" class="picker-empty">正在讀取資料夾…</p><p v-else-if="selectedFolder && !folderPhotos.length" class="picker-empty">沒有可讀取的圖片；可選擇其他資料夾。</p>
         <div class="photo-picker"><button v-for="p in folderPhotos" :key="p.uri" class="pick-photo" :class="{selected:selected(p.uri)}" @click="toggle(p)" :aria-label="`選取 ${p.name}`" :aria-pressed="selected(p.uri)"><PhotoThumb :uri="p.uri" :name="p.name" /><span class="pick-check"><Check v-if="selected(p.uri)" :size="15" /></span><span class="pick-name">{{ p.name }}</span></button></div>
         <p class="sheet-note">可切換資料夾繼續挑選；集合只保留你勾選的圖片。<br />資料夾新增圖片不會自動加入集合，原始檔案不會修改。</p>
-        <template v-if="editId"><button v-if="!deleting" class="delete-button" @click="deleting=true"><Trash2 :size="16" />移除集合</button><div v-else class="delete-confirm"><p>確定移除集合？原始圖片會保留。</p><button @click="deleting=false">取消</button><button class="danger" @click="remove">確定移除</button></div></template>
+
       </div>
+      <div v-if="editId" class="editor-delete"><button v-if="!deleting" class="delete-button" @click="deleting=true"><Trash2 :size="16" />刪除集合</button><div v-else class="delete-confirm"><p>確定刪除此集合？原始圖片會保留。</p><button @click="deleting=false">取消刪除</button><button class="danger" @click="remove">確定刪除</button></div></div>
       <button class="primary save-button" :disabled="!name.trim() || !draftPhotos.length || busy" @click="save">{{ editId ? '儲存變更' : '建立集合' }} · {{ draftPhotos.length }} 張<ArrowRight :size="18" /></button>
     </section>
   </div>
+  <CoverEditor v-if="coverEditor && draftPhotos.length" :photos="draftPhotos" :initial="draftCover && selected(draftCover.uri) ? draftCover : undefined" @close="coverEditor=false" @save="draftCover=$event; coverEditor=false" />
 </template>
-

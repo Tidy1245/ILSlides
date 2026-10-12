@@ -27,6 +27,17 @@ describe('集合瀏覽', () => {
   expect(loadCollections()).toEqual([{id:'old',name:'舊回憶',photos:[],legacyTree:'old-uri'}])
   expect(loadFolders()).toEqual([{uri:'old-uri',name:'Travel'}])
  })
+ it('保留有效封面設定，來源移出集合時移除封面',()=>{
+  const cover={uri:'a',x:.2,y:.7,zoom:2}
+  storage.set('ilslides.collections',JSON.stringify([{id:'1',name:'收藏',photos:[{uri:'a',name:'a'}],cover}]))
+  expect(loadCollections()[0]!.cover).toEqual(cover)
+  storage.set('ilslides.collections',JSON.stringify([{id:'1',name:'收藏',photos:[],cover}]))
+  expect(loadCollections()[0]!.cover).toBeUndefined()
+ })
+ it('無效封面數值與非陣列資料不會使載入崩潰',()=>{
+  storage.set('ilslides.collections',JSON.stringify([{id:'1',name:'收藏',photos:{},cover:{uri:'a',x:0,y:0,zoom:1}}]))
+  expect(loadCollections()[0]!.cover).toBeUndefined()
+ })
  it('損壞資料與無效圖片不會使載入崩潰', () => {
   storage.set('ilslides.collections','broken'); expect(loadCollections()).toEqual([])
   storage.set('ilslides.collections',JSON.stringify([null,{id:'1',name:'收藏',photos:[null,{uri:'ok',name:'有效'}]}]))
