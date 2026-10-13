@@ -6,7 +6,9 @@ const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,
 const errors=[]; page.on('pageerror',e=>errors.push(e.message))
 await page.addInitScript(() => {
  const svg=(text)=>'data:image/svg+xml;base64,'+btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#325b83"/><circle cx="420" cy="220" r="90" fill="#a9caef"/><path d="M0 740 250 300 600 760v40H0" fill="#102c4a"/><text x="25" y="760" fill="white" font-size="30">${text}</text></svg>`)
- window.Capacitor={PluginHeaders:[{name:'ImageFolders',methods:['pick','list','image'].map(name=>({name,rtype:'promise'}))}],nativePromise:async(plugin,method,options)=>{
+ window.androidBridge={}
+ window.Capacitor={PluginHeaders:[{name:'App',methods:[{name:'addListener',rtype:'callback'},{name:'removeListener',rtype:'promise'},{name:'exitApp',rtype:'promise'}]},{name:'ImageFolders',methods:['pick','list','image'].map(name=>({name,rtype:'promise'}))}],nativePromise:async(plugin,method,options)=>{
+  if(plugin==='App') { if(method==='exitApp') window.__exitCount=(window.__exitCount || 0)+1; return {} }
   if(method==='pick') return {uri:'content://travel',name:'Travel'}
   if(method==='list') {
    const prefix=options.tree==='content://other'?'other':'photo'
@@ -14,7 +16,7 @@ await page.addInitScript(() => {
   }
   if(method==='image') return {data:svg(options.uri)}
   throw new Error(method)
- }}
+ },nativeCallback:async(plugin,method,options,callback)=>{if(plugin==='App' && method==='addListener' && options.eventName==='backButton') window.__backHandler=callback;return 'mock-listener'}}
 })
 async function native() { await page.evaluate(()=>window.Capacitor.isNativePlatform=()=>true) }
 async function photo(name) { await page.waitForFunction(name=>{const imgs=[...document.querySelectorAll('.main-photo')];return imgs.length===1 && imgs[0].alt===name && imgs[0].naturalWidth>0 && !imgs[0].className.includes('dissolve-')},name) }
@@ -24,7 +26,14 @@ await native()
 await page.getByRole('button',{name:'新增集合',exact:true}).click()
 await page.getByLabel('集合名稱').fill('旅行精選')
 if(await page.getByRole('button',{name:'建立集合 · 0 張'}).isEnabled()) throw new Error('Empty collection save enabled')
+if(await page.getByRole('button',{name:'回到新增集合頂部'}).count()) throw new Error('Top button visible at editor top')
 await page.getByRole('button',{name:'選擇／重新授權資料夾'}).click()
+await page.locator('.editor-scroll').evaluate(el=>el.scrollTo(0,el.scrollHeight))
+await page.getByRole('button',{name:'回到新增集合頂部'}).waitFor()
+await page.screenshot({path:'docs/editor-scroll-top.png'})
+await page.getByRole('button',{name:'回到新增集合頂部'}).click()
+await page.waitForFunction(()=>document.querySelector('.editor-scroll').scrollTop<=1)
+if(await page.getByRole('button',{name:'回到新增集合頂部'}).count()) throw new Error('Top button still visible after scrolling to top')
 await (await selection('photo1.jpg')).click()
 await (await selection('photo3.jpg')).click()
 await page.getByRole('button',{name:'選擇封面與調整視窗'}).click()
@@ -45,12 +54,30 @@ const savedCover=await page.evaluate(()=>JSON.parse(localStorage.getItem('ilslid
 if(savedCover.uri!=='content://photo/3' || savedCover.zoom!==2 || savedCover.x===.5) throw new Error('Cover selection/crop not saved')
 await page.getByRole('button',{name:'開啟 旅行精選'}).click()
 await photo('photo1.jpg')
+if(await page.locator('.viewer-bottom').count()) throw new Error('Lower description still present')
+const stageBefore=await page.locator('.image-stage').boundingBox()
+if(stageBefore.x!==0 || stageBefore.y!==0 || stageBefore.width!==390 || stageBefore.height!==844) throw new Error('Initial viewer is not full size')
+const headerBg=await page.locator('.viewer-header').evaluate(el=>getComputedStyle(el).backgroundColor)
+if(!headerBg.includes('rgba')) throw new Error('Viewer title bar not translucent')
+await page.locator('.image-stage').tap({position:{x:195,y:400}})
+await page.waitForFunction(()=>document.querySelector('.viewer-header').classList.contains('hidden'))
+const stageHidden=await page.locator('.image-stage').boundingBox()
+if(JSON.stringify(stageHidden)!==JSON.stringify(stageBefore)) throw new Error('Hiding header changed image size')
+await page.locator('.image-stage').tap({position:{x:195,y:400}})
+await page.waitForFunction(()=>!document.querySelector('.viewer-header').classList.contains('hidden'))
+// Use real Chromium touch events to verify horizontal swipe still navigates.
+const touchClient=await page.context().newCDPSession(page)
+await touchClient.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:280,y:440}]})
+await touchClient.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:100,y:440}]})
+await touchClient.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})
+await photo('photo3.jpg')
+await page.keyboard.press('ArrowLeft');await photo('photo1.jpg')
 await page.screenshot({path:'docs/viewer.png'})
-await page.getByRole('button',{name:'下一張'}).click(); await photo('photo3.jpg')
-await page.getByRole('button',{name:'下一張'}).click(); await photo('photo1.jpg')
+await page.keyboard.press('ArrowRight'); await photo('photo3.jpg')
+await page.keyboard.press('ArrowRight'); await photo('photo1.jpg')
 // A new source image must not enter an existing collection.
 await page.evaluate(()=>localStorage.setItem('extra','yes'))
-await page.getByRole('button',{name:'重新讀取',exact:true}).click(); await photo('photo1.jpg')
+await page.getByRole('button',{name:'返回集合'}).click(); await page.getByRole('button',{name:'開啟 旅行精選'}).click(); await photo('photo1.jpg')
 if(!await page.getByText('1 / 2',{exact:true}).count()) throw new Error('Folder changes altered selection')
 await page.getByRole('button',{name:'返回集合'}).click()
 await page.reload(); await native()
@@ -101,21 +128,21 @@ await (await selection('other2.jpg')).click()
 await page.getByRole('button',{name:'儲存變更 · 3 張'}).click()
 await page.getByRole('button',{name:'開啟 旅途光影'}).click()
 await photo('photo3.jpg')
-await page.getByRole('button',{name:'下一張'}).click(); await photo('photo2.jpg')
-await page.getByRole('button',{name:'下一張'}).click(); await photo('other2.jpg')
+await page.keyboard.press('ArrowRight'); await photo('photo2.jpg')
+await page.keyboard.press('ArrowRight'); await photo('other2.jpg')
 await page.getByRole('button',{name:'返回集合'}).click()
 // Navigation, settings persistence and the actual viewer transition duration.
 await page.getByRole('button',{name:'開啟設定'}).click()
 await page.getByRole('heading',{name:'設定',exact:true}).waitFor()
 await page.getByLabel('動畫時間').fill('1200')
 await page.getByText('1.20 秒',{exact:true}).waitFor()
-await page.getByText('1.0.3',{exact:true}).waitFor()
+await page.getByText('1.0.4',{exact:true}).waitFor()
 await page.screenshot({path:'docs/settings.png'})
 await page.reload()
 await page.getByText('1.20 秒',{exact:true}).waitFor()
 await page.getByRole('navigation',{name:'主要導覽'}).getByRole('button',{name:'集合',exact:true}).click()
 await page.getByRole('button',{name:'開啟 旅途光影'}).click(); await photo('photo3.jpg')
-await page.getByRole('button',{name:'下一張'}).click()
+await page.keyboard.press('ArrowRight')
 await page.waitForFunction(()=>document.querySelector('.dissolve-enter-active'))
 const duration=await page.locator('.dissolve-enter-active').evaluate(el=>getComputedStyle(el).transitionDuration)
 if(duration!=='1.2s') throw new Error('Configured transition duration not applied')
@@ -140,11 +167,14 @@ await page.evaluate(()=>scrollTo(0,500))
 const bars=await page.evaluate(()=>({top:document.querySelector('.topbar').getBoundingClientRect().top,bottom:document.querySelector('.bottom-bar').getBoundingClientRect().bottom,h:innerHeight}))
 if(bars.top!==0 || bars.bottom!==bars.h) throw new Error('Navigation bars not fixed')
 await page.screenshot({path:'docs/collections.png'})
+await page.waitForFunction(()=>typeof window.__backHandler==='function')
+await page.evaluate(()=>{window.__exitCount=0;window.__backHandler({canGoBack:true})})
+await page.waitForFunction(()=>scrollY<=1)
+if(await page.evaluate(()=>location.hash!=='#/collections' || window.__exitCount!==0)) throw new Error('Back should scroll collection page instead of exit/navigation')
+await page.evaluate(()=>window.__backHandler({canGoBack:true}))
+await page.waitForFunction(()=>window.__exitCount===1)
 // Exercise the v1.0.0 migration through the same native startup branch used on Android.
 await page.addInitScript(() => {
- window.androidBridge={}
- window.Capacitor.PluginHeaders.push({name:'App',methods:[{name:'addListener',rtype:'callback'},{name:'removeListener',rtype:'promise'}]})
- window.Capacitor.nativeCallback=async()=> 'mock-listener'
  if(!localStorage.getItem('migration-seeded')) {
   localStorage.setItem('migration-seeded','yes'); localStorage.removeItem('extra')
   localStorage.removeItem('ilslides.folders')
@@ -157,5 +187,5 @@ await page.reload()
 await page.getByRole('button',{name:'Travel',exact:true}).waitFor()
 await page.getByRole('button',{name:'開啟 舊回憶'}).click(); await photo('photo1.jpg')
 if(errors.length) throw new Error(errors.join('\n'))
-console.log('PASS: multi-selection, remembered folder reuse, explicit membership, no auto-add, editing, independent collections, persistence, deletion, cover selection/drag/zoom/cancel/persistence, search, fixed navigation, home limit, settings persistence, actual transition duration, sorting, timestamps, mobile layout. Native bridge mocked.')
+console.log('PASS: multi-selection, remembered folder reuse, explicit membership, no auto-add, editing, independent collections, persistence, deletion, cover selection/drag/zoom/cancel/persistence, search, fixed navigation, home limit, settings persistence, actual transition duration, sorting, timestamps, collection back-to-top/exit, editor floating top button, full-size viewer/header toggle/touch swipe, mobile layout. Native bridge mocked.')
 await browser.close()

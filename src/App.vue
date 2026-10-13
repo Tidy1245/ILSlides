@@ -2,7 +2,7 @@
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
-import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, RefreshCw, Trash2, ChevronRight, Expand, Grid2X2, Check, Search, Settings, Home, ArrowUpDown } from 'lucide-vue-next'
+import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, Trash2, ChevronRight, ArrowUp, Grid2X2, Check, Search, Settings, Home, ArrowUpDown } from 'lucide-vue-next'
 import { Folders, loadCollections, loadFolders, uniquePhotos, sortedPhotos, nextIndex, type Collection, type Photo, type SourceFolder } from './library'
 import PhotoThumb from './PhotoThumb.vue'
 import CoverEditor from './CoverEditor.vue'
@@ -35,6 +35,10 @@ const busy = ref(false)
 const imageBusy = ref(false)
 const error = ref('')
 const modal = ref(false)
+const editorScroll = ref<HTMLElement>()
+const editorScrolled = ref(false)
+function editorTop() { editorScroll.value?.scrollTo({top:0,behavior:'smooth'}) }
+function updateEditorScroll() { editorScrolled.value=(editorScroll.value?.scrollTop || 0)>1 }
 const editId = ref<string | null>(null)
 const name = ref('')
 const selectedFolder = ref<SourceFolder | null>(null)
@@ -48,6 +52,7 @@ const current = computed(() => photos.value[index.value])
 const cache = new Map<string,string>()
 let request = 0
 let touchX = 0, touchY = 0
+let swiped = false
 let removeBack: (() => void) | undefined
 watch(collections, value => {
   try { localStorage.setItem('ilslides.collections', JSON.stringify(value)) }
@@ -106,11 +111,12 @@ async function open(c:Collection) {
 }
 function close() { ++request; active.value=null; photos.value=[]; displayed.value=''; imageBusy.value=false }
 function step(delta:number) { if(photos.value.length > 1) { error.value=''; index.value=nextIndex(index.value,delta,photos.value.length) } }
-function start(e:TouchEvent) { touchX=e.changedTouches[0]!.clientX; touchY=e.changedTouches[0]!.clientY }
-function end(e:TouchEvent) { const dx=e.changedTouches[0]!.clientX-touchX,dy=e.changedTouches[0]!.clientY-touchY; if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.3) step(dx<0?1:-1) }
+function toggleControls() { if(swiped) {swiped=false;return}; controls.value=!controls.value }
+function start(e:TouchEvent) { swiped=false; touchX=e.changedTouches[0]!.clientX; touchY=e.changedTouches[0]!.clientY }
+function end(e:TouchEvent) { const dx=e.changedTouches[0]!.clientX-touchX,dy=e.changedTouches[0]!.clientY-touchY; if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.3) {swiped=true;step(dx<0?1:-1)} }
 function edit(c?:Collection, folder?:SourceFolder) {
   editId.value=c?.id || null; name.value=c?.name || ''; draftPhotos.value=c ? [...c.photos] : []
-  draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false
+  draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false; editorScrolled.value=false
   selectedFolder.value=null; folderPhotos.value=[]; modal.value=true; error.value=''
   const initial=folder || folders.value[0]
   if(initial) void browseFolder(initial)
@@ -161,7 +167,7 @@ onMounted(async () => {
   window.addEventListener('keydown',keyboard)
   window.addEventListener('hashchange',changedHash)
   if(Capacitor.isNativePlatform()) {
-    const listener=await NativeApp.addListener('backButton', () => { if(coverEditor.value) coverEditor.value=false; else if(modal.value) modal.value=false; else if(active.value) close(); else if(page.value==='settings') navigate(settingsReturn); else if(page.value==='collections') navigate('home'); else void NativeApp.exitApp() })
+    const listener=await NativeApp.addListener('backButton', () => { if(coverEditor.value) coverEditor.value=false; else if(modal.value) modal.value=false; else if(active.value) close(); else if(page.value==='settings') navigate(settingsReturn); else if(page.value==='collections') { if((document.scrollingElement?.scrollTop || window.scrollY)>1) window.scrollTo(0,0); else void NativeApp.exitApp() } else void NativeApp.exitApp() })
     removeBack=()=>void listener.remove()
         for(const c of collections.value) {
       if(c.legacyTree) {
@@ -199,14 +205,14 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
   </main>
   <main v-else class="viewer" :style="{'--transition-time':preferences.transitionMs+'ms'}" @touchstart.passive="start" @touchend.passive="end">
     <header class="viewer-header" :class="{hidden:!controls}"><button class="icon-button" @click="close()" aria-label="返回集合"><ArrowLeft /></button><div><h2>{{ active.name }}</h2><span>{{ photos.length ? index+1 : 0 }} / {{ photos.length }}</span></div><button class="icon-button" @click="edit(active)" aria-label="編輯集合"><Pencil :size="20" /></button></header>
-    <div class="image-stage" @click="controls=!controls"><Transition name="dissolve"><img v-if="displayed" :key="displayed" :src="displayed" :alt="displayedName" class="main-photo" /></Transition><span v-if="imageBusy" class="loading-indicator">讀取中</span><div v-if="!photos.length" class="viewer-empty"><Images :size="40" /><h2>集合中還沒有圖片</h2><p>編輯集合並挑選要加入的圖片。</p><button class="primary" @click.stop="edit(active)"><Plus :size="18" />挑選圖片</button></div></div>
-    <div class="viewer-bottom" :class="{hidden:!controls}"><p class="filename">{{ current?.name }}</p><div class="viewer-actions"><button class="icon-button" @click="step(-1)" :disabled="photos.length<2" aria-label="上一張"><ArrowLeft /></button><div class="swipe-hint">左右滑動瀏覽<span>淡入 · 淡出</span></div><button class="icon-button" @click="step(1)" :disabled="photos.length<2" aria-label="下一張"><ArrowRight /></button></div><div class="viewer-tools"><button @click="open(active)" :disabled="busy"><RefreshCw :size="16" />重新讀取</button><button @click="controls=false"><Expand :size="16" />沉浸瀏覽</button></div></div>
+    <div class="image-stage" @click="toggleControls"><Transition name="dissolve"><img v-if="displayed" :key="displayed" :src="displayed" :alt="displayedName" class="main-photo" /></Transition><span v-if="imageBusy" class="loading-indicator">讀取中</span><div v-if="!photos.length" class="viewer-empty"><Images :size="40" /><h2>集合中還沒有圖片</h2><p>編輯集合並挑選要加入的圖片。</p><button class="primary" @click.stop="edit(active)"><Plus :size="18" />挑選圖片</button></div></div>
+
   </main>
   <div v-if="error" class="toast" role="alert"><span>{{ error }}</span><button @click="error=''" aria-label="關閉訊息"><X :size="18" /></button></div>
   <div v-if="modal" class="modal-backdrop" @click.self="modal=false">
     <section class="sheet collection-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
       <div class="sheet-handle"></div><div class="sheet-heading"><div><span class="eyebrow">CURATE YOUR COLLECTION</span><h2 id="sheet-title">{{ editId ? '編輯集合' : '建立新的集合' }}</h2></div><button class="icon-button" @click="modal=false" aria-label="關閉"><X :size="21" /></button></div>
-      <div class="editor-scroll">
+      <div class="editor-scroll-wrap"><div ref="editorScroll" class="editor-scroll" @scroll.passive="updateEditorScroll">
         <label class="field-label" for="collection-name">集合名稱</label><input id="collection-name" v-model="name" maxlength="60" placeholder="例如：旅行片刻、日常光影" />
         <label class="field-label">集合封面</label><button class="folder-select" :disabled="!draftPhotos.length" @click="coverEditor=true"><Images :size="23" /><span><strong>{{ draftCover && selected(draftCover.uri) ? '調整已選封面' : '選擇封面與調整視窗' }}</strong><small>從集合圖片挑選，拖曳及縮放封面範圍</small></span><ChevronRight :size="18" /></button>
         <label class="field-label">常用資料夾</label>
@@ -219,6 +225,7 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
         <p class="sheet-note">可切換資料夾繼續挑選；集合只保留你勾選的圖片。<br />資料夾新增圖片不會自動加入集合，原始檔案不會修改。</p>
 
       </div>
+      <button v-if="!editId && editorScrolled" class="editor-top-button" @click="editorTop" aria-label="回到新增集合頂部"><ArrowUp :size="22" /></button></div>
       <div v-if="editId" class="editor-delete"><button v-if="!deleting" class="delete-button" @click="deleting=true"><Trash2 :size="16" />刪除集合</button><div v-else class="delete-confirm"><p>確定刪除此集合？原始圖片會保留。</p><button @click="deleting=false">取消刪除</button><button class="danger" @click="remove">確定刪除</button></div></div>
       <button class="primary save-button" :disabled="!name.trim() || !draftPhotos.length || busy" @click="save">{{ editId ? '儲存變更' : '建立集合' }} · {{ draftPhotos.length }} 張<ArrowRight :size="18" /></button>
     </section>
