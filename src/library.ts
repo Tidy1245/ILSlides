@@ -17,6 +17,9 @@ export function nextIndex(index: number, delta: number, length: number) {
 export function uniquePhotos(photos: Photo[]) {
   return [...new Map(photos.map(p => [p.uri, {uri:p.uri, name:p.name}])).values()]
 }
+export function suggestCollectionName(fileName?:string) {
+  return fileName?.match(/^([^\s-]+)/)?.[1] || ''
+}
 function read(key: string): unknown[] {
   try { const value=JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(value) ? value : [] } catch { return [] }
 }

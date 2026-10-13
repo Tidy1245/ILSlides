@@ -8,9 +8,9 @@ export function sortCollections(collections:Collection[], key:SortKey, direction
 export function transitionTime(value:unknown) {
  return typeof value==='number' && Number.isFinite(value) ? Math.max(100,Math.min(2000,Math.round(value/20)*20)) : 360
 }
-export function loadPreferences():{transitionMs:number;sortKey:SortKey;sortDirection:SortDirection} {
+export function loadPreferences():{transitionMs:number;sortKey:SortKey;sortDirection:SortDirection;autoName:boolean} {
  try {
   const value=JSON.parse(localStorage.getItem('ilslides.preferences') || '{}')
-  return {transitionMs:transitionTime(value.transitionMs),sortKey:['name','createdAt','updatedAt'].includes(value.sortKey)?value.sortKey:'name',sortDirection:value.sortDirection==='desc'?'desc':'asc'}
- } catch { return {transitionMs:360,sortKey:'name',sortDirection:'asc'} }
+  return {transitionMs:transitionTime(value.transitionMs),sortKey:['name','createdAt','updatedAt'].includes(value.sortKey)?value.sortKey:'name',sortDirection:value.sortDirection==='desc'?'desc':'asc',autoName:value.autoName!==false}
+ } catch { return {transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true} }
 }

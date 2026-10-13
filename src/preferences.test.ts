@@ -19,10 +19,14 @@ describe('集合排序與轉場設定',()=>{
   expect(transitionTime(-1)).toBe(100);expect(transitionTime(9000)).toBe(2000)
   expect(transitionTime(NaN)).toBe(360);expect(transitionTime(361)).toBe(360)
  })
+ it('停用自動命名後重新載入仍保持停用',()=>{
+  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({autoName:false})}})
+  expect(loadPreferences().autoName).toBe(false)
+ })
  it('載入有效設定並回退損壞設定',()=>{
-  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc'})}})
-  expect(loadPreferences()).toEqual({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc'})
+  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true})}})
+  expect(loadPreferences()).toEqual({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true})
   Object.assign(globalThis,{localStorage:{getItem:()=>'{invalid'}})
-  expect(loadPreferences()).toEqual({transitionMs:360,sortKey:'name',sortDirection:'asc'})
+  expect(loadPreferences()).toEqual({transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true})
  })
 })

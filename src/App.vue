@@ -3,7 +3,7 @@ import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
 import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, Trash2, ChevronRight, ArrowUp, Grid2X2, Check, Search, Settings, Home, ArrowUpDown } from 'lucide-vue-next'
-import { Folders, loadCollections, loadFolders, uniquePhotos, sortedPhotos, nextIndex, type Collection, type Photo, type SourceFolder } from './library'
+import { Folders, loadCollections, loadFolders, uniquePhotos, suggestCollectionName, sortedPhotos, nextIndex, type Collection, type Photo, type SourceFolder } from './library'
 import PhotoThumb from './PhotoThumb.vue'
 import CoverEditor from './CoverEditor.vue'
 import { drawCover, type CoverSettings } from './cover'
@@ -44,6 +44,8 @@ const name = ref('')
 const selectedFolder = ref<SourceFolder | null>(null)
 const folderPhotos = ref<Photo[]>([])
 const draftPhotos = ref<Photo[]>([])
+const suggestedName = computed(() => !editId.value && preferences.value.autoName ? suggestCollectionName(draftPhotos.value[0]?.name) : '')
+const collectionName = computed(() => name.value.trim() || suggestedName.value)
 const folderBusy = ref(false)
 let folderRequest = 0
 const controls = ref(true)
@@ -143,10 +145,10 @@ function selected(uri:string) { return draftPhotos.value.some(p=>p.uri===uri) }
 function toggle(p:Photo) { draftPhotos.value=selected(p.uri) ? draftPhotos.value.filter(v=>v.uri!==p.uri) : [...draftPhotos.value,p] }
 function selectAll() { draftPhotos.value=uniquePhotos([...draftPhotos.value,...folderPhotos.value]) }
 async function save() {
-  if(!name.value.trim() || !draftPhotos.value.length || busy.value) return
+  if(!collectionName.value || !draftPhotos.value.length || busy.value) return
   const existing=collections.value.find(c=>c.id===editId.value)
   const now=Date.now()
-  const c:Collection={createdAt:existing ? existing.createdAt : now,updatedAt:now,id:editId.value || crypto.randomUUID(),name:name.value.trim(),photos:uniquePhotos(draftPhotos.value),...(draftCover.value && selected(draftCover.value.uri) ? {cover:{...draftCover.value}} : {})}
+  const c:Collection={createdAt:existing ? existing.createdAt : now,updatedAt:now,id:editId.value || crypto.randomUUID(),name:collectionName.value,photos:uniquePhotos(draftPhotos.value),...(draftCover.value && selected(draftCover.value.uri) ? {cover:{...draftCover.value}} : {})}
   const pos=collections.value.findIndex(v=>v.id===c.id)
   if(pos<0) collections.value.push(c); else collections.value[pos]=c
   modal.value=false; ++folderRequest
@@ -184,7 +186,7 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
 <template>
   <main v-if="!active" class="library">
     <header class="topbar"><a class="brand" href="#/home" aria-label="ILSlides 首頁" @click.prevent="navigate('home')"><span class="brand-icon"><Images :size="21" /></span>ILSlides<span class="brand-dot"></span></a><button class="icon-button settings-button" @click="navigate('settings')" aria-label="開啟設定"><Settings :size="22" /></button></header>
-    <section v-if="page==='settings'" class="settings-page"><div class="settings-heading"><button class="icon-button" @click="navigate(settingsReturn)" aria-label="返回設定前頁面"><ArrowLeft :size="20" /></button><h1>設定</h1></div><section class="setting-card"><div class="setting-title"><Images :size="21" /><h2>圖片轉場動畫</h2></div><p>調整左右瀏覽時，淡入淡出的動畫時間。</p><div class="duration-label"><label for="transition-duration">動畫時間</label><output>{{ (preferences.transitionMs/1000).toFixed(2) }} 秒</output></div><input id="transition-duration" type="range" min="100" max="2000" step="20" :value="preferences.transitionMs" @input="preferences.transitionMs=transitionTime(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>0.10 秒 · 快速</span><span>2.00 秒 · 緩慢</span></div><button class="reset-setting" @click="preferences.transitionMs=360">恢復預設 0.36 秒</button><p class="setting-note">設定自動保存。裝置啟用減少動畫時，會優先依裝置設定顯示。</p></section><section class="setting-card version-card"><span>ILSlides 版本</span><strong>{{ version }}</strong></section></section>
+    <section v-if="page==='settings'" class="settings-page"><div class="settings-heading"><button class="icon-button" @click="navigate(settingsReturn)" aria-label="返回設定前頁面"><ArrowLeft :size="20" /></button><h1>設定</h1></div><section class="setting-card"><div class="setting-title"><Images :size="21" /><h2>圖片轉場動畫</h2></div><p>調整左右瀏覽時，淡入淡出的動畫時間。</p><div class="duration-label"><label for="transition-duration">動畫時間</label><output>{{ (preferences.transitionMs/1000).toFixed(2) }} 秒</output></div><input id="transition-duration" type="range" min="100" max="2000" step="20" :value="preferences.transitionMs" @input="preferences.transitionMs=transitionTime(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>0.10 秒 · 快速</span><span>2.00 秒 · 緩慢</span></div><button class="reset-setting" @click="preferences.transitionMs=360">恢復預設 0.36 秒</button><p class="setting-note">設定自動保存。裝置啟用減少動畫時，會優先依裝置設定顯示。</p></section><section class="setting-card auto-name-setting"><div class="setting-toggle-row"><div><h2>自動命名新集合</h2><p>名稱留空時，以第一張選取圖片的檔名命名。</p></div><button role="switch" aria-label="自動命名新集合" :aria-checked="preferences.autoName" :class="{enabled:preferences.autoName}" @click="preferences.autoName=!preferences.autoName"><span></span></button></div><p class="setting-note">規則 <code>^([^\s-]+)</code>：取第一個空白或「-」之前的字串；手動輸入名稱時優先使用手動名稱。</p></section><section class="setting-card version-card"><span>ILSlides 版本</span><strong>{{ version }}</strong></section></section>
     <template v-else>
     <section v-if="page==='home'" class="stats"><div><strong>{{ collections.length.toString().padStart(2,'0') }}</strong><span>圖片集合</span></div><div class="stat-divider"></div><div><strong>{{ total.toLocaleString() }}</strong><span>張照片</span></div><span class="offline"><span></span>僅在裝置上讀取</span></section>
     <section v-if="page==='collections'" class="source-section"><div class="source-heading"><span><FolderOpen :size="15" />常用資料夾</span><button @click="edit()">管理／挑選圖片<ChevronRight :size="15" /></button></div><div class="folder-chips"><button v-for="f in folders" :key="f.uri" @click="edit(undefined,f)"><FolderOpen :size="14" />{{ f.name }}</button><button v-if="!folders.length" @click="edit()"><Plus :size="14" />記住圖片資料夾</button></div></section>
@@ -214,6 +216,7 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
       <div class="sheet-handle"></div><div class="sheet-heading"><div><span class="eyebrow">CURATE YOUR COLLECTION</span><h2 id="sheet-title">{{ editId ? '編輯集合' : '建立新的集合' }}</h2></div><button class="icon-button" @click="modal=false" aria-label="關閉"><X :size="21" /></button></div>
       <div class="editor-scroll-wrap"><div ref="editorScroll" class="editor-scroll" @scroll.passive="updateEditorScroll">
         <label class="field-label" for="collection-name">集合名稱</label><input id="collection-name" v-model="name" maxlength="60" placeholder="例如：旅行片刻、日常光影" />
+        <p v-if="!editId && !name.trim() && draftPhotos.length" class="auto-name-hint">{{ suggestedName ? '將自動命名為：' + suggestedName : preferences.autoName ? '檔名無法套用規則，請輸入集合名稱。' : '自動命名已停用，請輸入集合名稱。' }}</p>
         <label class="field-label">集合封面</label><button class="folder-select" :disabled="!draftPhotos.length" @click="coverEditor=true"><Images :size="23" /><span><strong>{{ draftCover && selected(draftCover.uri) ? '調整已選封面' : '選擇封面與調整視窗' }}</strong><small>從集合圖片挑選，拖曳及縮放封面範圍</small></span><ChevronRight :size="18" /></button>
         <label class="field-label">常用資料夾</label>
         <div class="folder-chips"><button v-for="f in folders" :key="f.uri" :class="{chosen:selectedFolder?.uri===f.uri}" @click="browseFolder(f)"><FolderOpen :size="14" />{{ f.name }}</button></div>
@@ -225,9 +228,9 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
         <p class="sheet-note">可切換資料夾繼續挑選；集合只保留你勾選的圖片。<br />資料夾新增圖片不會自動加入集合，原始檔案不會修改。</p>
 
       </div>
-      <button v-if="!editId && editorScrolled" class="editor-top-button" @click="editorTop" aria-label="回到新增集合頂部"><ArrowUp :size="22" /></button></div>
+      <button v-if="editorScrolled" class="editor-top-button" @click="editorTop" :aria-label="editId ? '回到編輯集合頂部' : '回到新增集合頂部'"><ArrowUp :size="22" /></button></div>
       <div v-if="editId" class="editor-delete"><button v-if="!deleting" class="delete-button" @click="deleting=true"><Trash2 :size="16" />刪除集合</button><div v-else class="delete-confirm"><p>確定刪除此集合？原始圖片會保留。</p><button @click="deleting=false">取消刪除</button><button class="danger" @click="remove">確定刪除</button></div></div>
-      <button class="primary save-button" :disabled="!name.trim() || !draftPhotos.length || busy" @click="save">{{ editId ? '儲存變更' : '建立集合' }} · {{ draftPhotos.length }} 張<ArrowRight :size="18" /></button>
+      <button class="primary save-button" :disabled="!collectionName || !draftPhotos.length || busy" @click="save">{{ editId ? '儲存變更' : '建立集合' }} · {{ draftPhotos.length }} 張<ArrowRight :size="18" /></button>
     </section>
   </div>
   <CoverEditor v-if="coverEditor && draftPhotos.length" :photos="draftPhotos" :initial="draftCover && selected(draftCover.uri) ? draftCover : undefined" @close="coverEditor=false" @save="draftCover=$event; coverEditor=false" />

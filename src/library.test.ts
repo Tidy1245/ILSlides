@@ -1,11 +1,24 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { nextIndex, sortedPhotos, uniquePhotos, loadCollections, loadFolders } from './library'
+import { nextIndex, sortedPhotos, uniquePhotos, suggestCollectionName, loadCollections, loadFolders } from './library'
 const storage=new Map<string,string>()
 beforeEach(() => {
  storage.clear()
  Object.assign(globalThis,{localStorage:{getItem:(key:string)=>storage.get(key) ?? null}})
 })
 describe('集合瀏覽', () => {
+ it('按指定正則取空白或連字號前的檔名',()=>{
+  expect(suggestCollectionName('旅行 001.jpg')).toBe('旅行')
+  expect(suggestCollectionName('旅行-001.jpg')).toBe('旅行')
+  expect(suggestCollectionName('旅行	001.jpg')).toBe('旅行')
+ })
+ it('無分隔符時保留完整檔名，包含副檔名',()=>{
+  expect(suggestCollectionName('photo.jpg')).toBe('photo.jpg')
+ })
+ it('未選圖片或第一字元無法匹配時不產生名稱',()=>{
+  expect(suggestCollectionName()).toBe('')
+  expect(suggestCollectionName(' leading.jpg')).toBe('')
+  expect(suggestCollectionName('-leading.jpg')).toBe('')
+ })
  it('依檔名自然排序並保留原清單', () => {
   const source=[{name:'photo10.jpg',uri:'10'},{name:'photo2.jpg',uri:'2'},{name:'photo1.jpg',uri:'1'}]
   expect(sortedPhotos(source).map(p=>p.uri)).toEqual(['1','2','10']); expect(source[0]!.uri).toBe('10')
