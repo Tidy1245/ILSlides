@@ -4,7 +4,7 @@
 
 ## 安裝
 
-前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-5.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
+前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-6.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
 
 ## 使用方式
 
@@ -22,14 +22,18 @@
 
 自動命名新集合預設啟用，可在設定頁停用。名稱留空時，儲存採第一張目前仍選取的圖片檔名，套用 `^([^s-]+)`：例如 `旅行-001.jpg`、`旅行 001.jpg` → `旅行`。無空白或 `-` 時保留完整檔名（包含副檔名）。手動名稱優先，不會自動改名已有集合；無法匹配或停用時，需自行輸入名稱。
 
+設定頁可新增、修改與刪除標籤，自訂漸層起始／結束色；新增或編輯集合可套用多個標籤，首頁及集合頁在名稱下方顯示。刪除標籤會解除集合上的參照，保留集合本身。
+
+封面接近畫面時才載入，首頁優先載入最近 4 筆；已產生的縮圖保存於 App 私有快取目錄，再次開啟先顯示快取、背景檢查原圖變動。快取上限 64 MiB，淘汰最久未使用項目；來源缺少可靠修改資訊時每 24 小時重建。可於設定頁點「重新整理封面」清除縮圖快取，原圖與集合設定保留。
+
 常用資料夾是找圖捷徑，集合是獨立的圖片清單。同一張圖片可加入不同集合。資料夾新增圖片不會自動加入既有集合；重新開啟集合會重載已選圖片。
 
 ## 升級與資料
 
 - v1.0.0 舊集合在首次啟動時轉成固定圖片清單，保留原集合名稱與當時目錄內圖片；原目錄成為常用資料夾捷徑。轉換失敗時可編輯集合重新選圖。
-- Android Storage Access Framework 保存目錄讀取授權，圖片不複製、不上傳、不修改。
-- 新建集合會記錄建立／修改日期；編輯儲存只更新修改日期。舊集合無歷史日期時顯示「未記錄」，不捏造舊日期。
-- 集合名稱、選取的圖片 URI、日期、設定與資料夾捷徑保存於裝置 WebView localStorage；清除 App 資料／解除安裝後需要重建。
+- Android Storage Access Framework 保存目錄讀取授權，原始圖片不複製、不上傳、不修改；另保存可重建的封面縮圖。
+- 新建集合會記錄建立／修改日期；編輯儲存只更新修改日期。日期保留供排序使用，卡片下方改顯示標籤；舊集合不捏造歷史日期。
+- 集合名稱、選取的圖片 URI、日期、標籤、設定與資料夾捷徑保存於裝置 WebView localStorage；清除 App 資料／解除安裝後需要重建。
 - 目錄挑圖依檔名自然排序，不遞迴讀取子目錄。集合按選取順序瀏覽；左右循環。
 - 預設 360ms、可調整 100～2000ms 的淡入淡出，先解碼再切換並預讀下一張；尊重減少動畫設定。
 - 預覽長邊最多 2048 像素、封面最多 600、挑圖縮圖最多 320；原圖不變。
@@ -62,11 +66,12 @@ npm run release:prepare -- 2.0.0 # 明確指定
 
 此工具同步 package.json、package-lock.json、Android versionName，並遞增 Android versionCode。一般建置不改版號。更新 AGENTS.md 與發布說明後，建置 APK、提交推送 main，再建立 GitHub Release 上傳 `ILSlides<版號>.apk` 與 `SHA256SUMS.txt`。
 
-UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
+UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`、`node scripts/cache-tags-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
 
-## v1.0.5 驗證
+## v1.0.6 驗證
 
-- 型別檢查、正式建置、19 項單元測試通過。
+- 型別檢查、正式建置、36 項 TypeScript 單元測試及 5 項 Android 封面快取測試。
+- 新增 UI 測試涵蓋 200 個集合的可見優先載入、快取命中不解碼原圖、手動清除、來源變動，以及漸層標籤的新增／多選／修改／保存／刪除。
 - 手機 UI 測試新增編輯集合回頂部、空名稱自動命名、選取順序變更、手動名稱優先、停用開關／重開保存與已有集合不自動改名；既有返回鍵、瀏覽、設定、排序、封面、搜尋與升級流程回歸通過。
 - Android APK 建置與 lint 通過；APK 簽章與 SHA-256 驗證。
 - 此次未連接 Android 實機，目錄持久授權與裝置圖片解碼仍需實機確認。
@@ -100,3 +105,9 @@ UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke
 | 新集合名稱留空 | 編輯集合回頂部 |
 | --- | --- |
 | ![自動命名](docs/automatic-name.png) | ![編輯回頂部](docs/edit-scroll-top.png) |
+
+漸層標籤與設定：
+
+| 集合標籤 | 設定管理 |
+| --- | --- |
+| ![標籤](docs/tags-home.png) | ![標籤設定](docs/tags-settings.png) |

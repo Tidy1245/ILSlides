@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 const require=createRequire(import.meta.url)
+const {version}=require('../package.json')
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const browser=await chromium.launch({channel:'chrome',headless:true})
 const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true})
@@ -7,13 +8,21 @@ const errors=[]; page.on('pageerror',e=>errors.push(e.message))
 await page.addInitScript(() => {
  const svg=(text)=>'data:image/svg+xml;base64,'+btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#325b83"/><circle cx="420" cy="220" r="90" fill="#a9caef"/><path d="M0 740 250 300 600 760v40H0" fill="#102c4a"/><text x="25" y="760" fill="white" font-size="30">${text}</text></svg>`)
  window.androidBridge={}
- window.Capacitor={PluginHeaders:[{name:'App',methods:[{name:'addListener',rtype:'callback'},{name:'removeListener',rtype:'promise'},{name:'exitApp',rtype:'promise'}]},{name:'ImageFolders',methods:['pick','list','image'].map(name=>({name,rtype:'promise'}))}],nativePromise:async(plugin,method,options)=>{
+ window.Capacitor={PluginHeaders:[{name:'App',methods:[{name:'addListener',rtype:'callback'},{name:'removeListener',rtype:'promise'},{name:'exitApp',rtype:'promise'}]},{name:'ImageFolders',methods:['pick','list','image','coverCache','sourceState'].map(name=>({name,rtype:'promise'}))}],nativePromise:async(plugin,method,options)=>{
   if(plugin==='App') { if(method==='exitApp') window.__exitCount=(window.__exitCount || 0)+1; return {} }
   if(method==='pick') return {uri:'content://travel',name:'Travel'}
   if(method==='list') {
    const prefix=options.tree==='content://other'?'other':'photo'
    return {images:[1,2,3,...(localStorage.getItem('extra') ? [4] : [])].map(i=>({uri:`content://${prefix}/${i}`,name:localStorage.getItem('naming-files') ? ['旅行-001.jpg','日常 002.jpg','plain.jpg','extra.jpg'][i-1] : `${prefix}${i}.jpg`}))}
   }
+  if(method==='coverCache') {
+   const key='mock.cover.'+options.key
+   if(options.op==='clear') {Object.keys(localStorage).filter(k=>k.startsWith('mock.cover.')).forEach(k=>localStorage.removeItem(k));return {}}
+   if(options.op==='remove') {localStorage.removeItem(key);return {}}
+   if(options.op==='get') return {entry:JSON.parse(localStorage.getItem(key) || 'null') || undefined}
+   const entry={uri:options.data,sourceUri:options.sourceUri,signature:options.signature,createdAt:Date.now()};localStorage.setItem(key,JSON.stringify(entry));return {entry}
+  }
+  if(method==='sourceState') return {status:'ok',signature:'1:100'}
   if(method==='image') return {data:svg(options.uri)}
   throw new Error(method)
  },nativeCallback:async(plugin,method,options,callback)=>{if(plugin==='App' && method==='addListener' && options.eventName==='backButton') window.__backHandler=callback;return 'mock-listener'}}
@@ -136,7 +145,7 @@ await page.getByRole('button',{name:'開啟設定'}).click()
 await page.getByRole('heading',{name:'設定',exact:true}).waitFor()
 await page.getByLabel('動畫時間').fill('1200')
 await page.getByText('1.20 秒',{exact:true}).waitFor()
-await page.getByText('1.0.5',{exact:true}).waitFor()
+await page.getByText(version,{exact:true}).waitFor()
 await page.waitForFunction(()=>getComputedStyle(document.querySelector('.setting-toggle-row button>span')).transform==='matrix(1, 0, 0, 1, 22, 0)')
 await page.screenshot({path:'docs/settings.png'})
 await page.reload()

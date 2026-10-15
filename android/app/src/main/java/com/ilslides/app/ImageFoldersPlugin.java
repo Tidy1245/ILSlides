@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageDecoder;
 import android.net.Uri;
 import android.provider.DocumentsContract;
@@ -13,9 +14,84 @@ import com.getcapacitor.*;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @CapacitorPlugin(name = "ImageFolders")
 public class ImageFoldersPlugin extends Plugin {
+    private final ExecutorService cacheWorker=Executors.newSingleThreadExecutor();
+    private final ExecutorService sourceWorker=Executors.newSingleThreadExecutor();
+    private final ExecutorService imageWorker=Executors.newSingleThreadExecutor();
+    private CoverDiskCache coverStore;
+
+    @Override
+    protected void handleOnDestroy() { cacheWorker.shutdownNow(); sourceWorker.shutdownNow(); imageWorker.shutdownNow(); }
+
+    private CoverDiskCache store() throws Exception {
+        if (coverStore==null) coverStore=new CoverDiskCache(new File(getContext().getCacheDir(),"covers"),64L*1024*1024);
+        return coverStore;
+    }
+
+    private JSObject entry(CoverDiskCache.Entry value) {
+        JSObject result=new JSObject();
+        if (value!=null) {
+            JSObject data=new JSObject();
+            data.put("uri",Uri.fromFile(value.file).toString()); data.put("sourceUri",value.sourceUri);
+            data.put("signature",value.signature); data.put("createdAt",value.createdAt); result.put("entry",data);
+        }
+        return result;
+    }
+
+    @PluginMethod
+    public void coverCache(PluginCall call) {
+        cacheWorker.execute(()->{
+            try {
+                String op=call.getString("op",""),key=call.getString("key","");
+                CoverDiskCache cache=store();
+                if ("clear".equals(op)) { cache.clear(); call.resolve(); return; }
+                if (key.isEmpty()) throw new IllegalArgumentException("Missing cover key");
+                if ("get".equals(op)) {
+                    CoverDiskCache.Entry value=cache.get(key);
+                    if (value!=null) {
+                        BitmapFactory.Options bounds=new BitmapFactory.Options(); bounds.inJustDecodeBounds=true;
+                        BitmapFactory.decodeFile(value.file.getAbsolutePath(),bounds);
+                        if (bounds.outWidth<=0 || bounds.outHeight<=0) { cache.remove(key); value=null; }
+                    }
+                    call.resolve(entry(value));
+                } else if ("put".equals(op)) {
+                    String data=call.getString("data","");
+                    if (!data.startsWith("data:image/webp;base64,")) throw new IllegalArgumentException("Invalid cover data");
+                    byte[] bytes=Base64.decode(data.substring(data.indexOf(',')+1),Base64.DEFAULT);
+                    call.resolve(entry(cache.put(key,bytes,call.getString("sourceUri",""),call.getString("signature",""))));
+                } else if ("remove".equals(op)) { cache.remove(key); call.resolve(); }
+                else throw new IllegalArgumentException("Unknown cache operation");
+            } catch (Exception e) { call.reject("封面快取無法讀寫。",e); }
+        });
+    }
+
+    @PluginMethod
+    public void sourceState(PluginCall call) {
+        sourceWorker.execute(()->{
+            JSObject result=new JSObject(); result.put("signature","");
+            try {
+                Uri uri=Uri.parse(call.getString("uri",""));
+                if (!"content".equals(uri.getScheme())) throw new IllegalArgumentException("Invalid source");
+                String[] fields={DocumentsContract.Document.COLUMN_LAST_MODIFIED,DocumentsContract.Document.COLUMN_SIZE};
+                try (Cursor cursor=getContext().getContentResolver().query(uri,fields,null,null,null)) {
+                    if (cursor==null) result.put("status","unknown");
+                    else if (!cursor.moveToFirst()) result.put("status","missing");
+                    else {
+                        result.put("status","ok");
+                        long modified=cursor.isNull(0) ? 0 : cursor.getLong(0);
+                        if (modified>0 && !cursor.isNull(1)) result.put("signature",modified+":"+cursor.getLong(1));
+                    }
+                }
+            } catch (SecurityException e) { result.put("status","denied"); }
+            catch (Exception e) { result.put("status","unknown"); }
+            call.resolve(result);
+        });
+    }
     @PluginMethod
     public void pick(PluginCall call) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
@@ -74,7 +150,7 @@ public class ImageFoldersPlugin extends Plugin {
         String uriValue = call.getString("uri");
         if (uriValue == null) { call.reject("缺少圖片 URI"); return; }
         int maxSize = Math.max(128, Math.min(2560, call.getInt("size", 2048)));
-        execute(() -> {
+        imageWorker.execute(() -> {
             Bitmap bitmap = null;
             try {
                 Uri uri = Uri.parse(uriValue);
