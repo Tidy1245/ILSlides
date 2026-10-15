@@ -1,6 +1,10 @@
 import type { Collection } from './library'
 export type SortKey='name'|'createdAt'|'updatedAt'
 export type SortDirection='asc'|'desc'
+export function filterCollections(collections:Collection[], query:string, tags:string[]) {
+ const name=query.trim().toLocaleLowerCase()
+ return collections.filter(c=>c.name.toLocaleLowerCase().includes(name) && (!tags.length || tags.some(id=>c.tagIds?.includes(id))))
+}
 export function sortCollections(collections:Collection[], key:SortKey, direction:SortDirection) {
  const sign=direction==='asc' ? 1 : -1
  return [...collections].sort((a,b)=>sign*(key==='name' ? a.name.localeCompare(b.name,'zh-Hant',{numeric:true,sensitivity:'base'}) : (a[key] || 0)-(b[key] || 0)))
