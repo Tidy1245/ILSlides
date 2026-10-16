@@ -12,9 +12,12 @@ export function sortCollections(collections:Collection[], key:SortKey, direction
 export function transitionTime(value:unknown) {
  return typeof value==='number' && Number.isFinite(value) ? Math.max(100,Math.min(2000,Math.round(value/20)*20)) : 360
 }
-export function loadPreferences():{transitionMs:number;sortKey:SortKey;sortDirection:SortDirection;autoName:boolean} {
+export function doubleTapScale(value:unknown) {
+ return typeof value==='number' && Number.isFinite(value) ? Math.max(1.5,Math.min(4,Math.round(value*4)/4)) : 2
+}
+export function loadPreferences():{transitionMs:number;sortKey:SortKey;sortDirection:SortDirection;autoName:boolean;doubleTapScale:number} {
  try {
   const value=JSON.parse(localStorage.getItem('ilslides.preferences') || '{}')
-  return {transitionMs:transitionTime(value.transitionMs),sortKey:['name','createdAt','updatedAt'].includes(value.sortKey)?value.sortKey:'name',sortDirection:value.sortDirection==='desc'?'desc':'asc',autoName:value.autoName!==false}
- } catch { return {transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true} }
+  return {transitionMs:transitionTime(value.transitionMs),sortKey:['name','createdAt','updatedAt'].includes(value.sortKey)?value.sortKey:'name',sortDirection:value.sortDirection==='desc'?'desc':'asc',autoName:value.autoName!==false,doubleTapScale:doubleTapScale(value.doubleTapScale)}
+ } catch { return {transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true,doubleTapScale:2} }
 }

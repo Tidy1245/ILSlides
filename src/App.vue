@@ -10,10 +10,11 @@ import type { CoverSettings } from './cover'
 import CollectionCover from './CollectionCover.vue'
 import TagManager from './TagManager.vue'
 import CollectionFilter from './CollectionFilter.vue'
+import PhotoViewport from './PhotoViewport.vue'
 import { loadTags, tagStyle, type Tag } from './tags'
 import { coverKey, coverLoader } from './cover-cache'
 import { version } from '../package.json'
-import { sortCollections, filterCollections, loadPreferences, transitionTime } from './preferences'
+import { sortCollections, filterCollections, loadPreferences, transitionTime, doubleTapScale } from './preferences'
 const folders = ref(loadFolders())
 const collections = ref(loadCollections())
 const active = ref<Collection | null>(null)
@@ -21,6 +22,7 @@ const photos = ref<Photo[]>([])
 const index = ref(0)
 const displayed = ref('')
 const displayedName = ref('')
+const viewport=ref<InstanceType<typeof PhotoViewport>>()
 const tags=ref(loadTags())
 const draftTags=ref<string[]>([]),coverEpoch=ref(0),cacheBusy=ref(false),cacheMessage=ref('')
 watch(tags,value=>{try {localStorage.setItem('ilslides.tags',JSON.stringify(value))} catch {error.value='標籤無法保存。'}},{deep:true})
@@ -81,8 +83,6 @@ const current = computed(() => photos.value[index.value])
 const cache = new Map<string,string>()
 let request = 0
 let libraryScrollTop=0
-let touchX = 0, touchY = 0
-let swiped = false
 let removeBack: (() => void) | undefined
 watch(collections, value => {
   try { localStorage.setItem('ilslides.collections', JSON.stringify(value)) }
@@ -133,10 +133,8 @@ async function close() {
   await nextTick()
   if(!active.value && page.value===returnPage) window.scrollTo(0,position)
 }
-function step(delta:number) { if(photos.value.length > 1) { error.value=''; index.value=nextIndex(index.value,delta,photos.value.length) } }
-function toggleControls() { if(swiped) {swiped=false;return}; controls.value=!controls.value }
-function start(e:TouchEvent) { swiped=false; touchX=e.changedTouches[0]!.clientX; touchY=e.changedTouches[0]!.clientY }
-function end(e:TouchEvent) { const dx=e.changedTouches[0]!.clientX-touchX,dy=e.changedTouches[0]!.clientY-touchY; if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.3) {swiped=true;step(dx<0?1:-1)} }
+function step(delta:number) { if(photos.value.length > 1) { viewport.value?.cancel();error.value=''; index.value=nextIndex(index.value,delta,photos.value.length) } }
+function toggleControls() { controls.value=!controls.value }
 function edit(c?:Collection, folder?:SourceFolder) {
   editId.value=c?.id || null; name.value=c?.name || ''; draftPhotos.value=c ? [...c.photos] : []
   draftTags.value=(c?.tagIds || []).filter(id=>tags.value.some(t=>t.id===id))
@@ -209,7 +207,7 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
 <template>
   <main v-if="!active" class="library" :inert="filterOpen">
     <header class="topbar"><a class="brand" href="#/home" aria-label="ILSlides 首頁" @click.prevent="navigate('home')"><span class="brand-icon"><Images :size="21" /></span>ILSlides<span class="brand-dot"></span></a><button class="icon-button settings-button" @click="navigate('settings')" aria-label="開啟設定"><Settings :size="22" /></button></header>
-    <section v-if="page==='settings'" class="settings-page"><div class="settings-heading"><button class="icon-button" @click="navigate(settingsReturn)" aria-label="返回設定前頁面"><ArrowLeft :size="20" /></button><h1>設定</h1></div><section class="setting-card"><div class="setting-title"><Images :size="21" /><h2>圖片轉場動畫</h2></div><p>調整左右瀏覽時，淡入淡出的動畫時間。</p><div class="duration-label"><label for="transition-duration">動畫時間</label><output>{{ (preferences.transitionMs/1000).toFixed(2) }} 秒</output></div><input id="transition-duration" type="range" min="100" max="2000" step="20" :value="preferences.transitionMs" @input="preferences.transitionMs=transitionTime(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>0.10 秒 · 快速</span><span>2.00 秒 · 緩慢</span></div><button class="reset-setting" @click="preferences.transitionMs=360">恢復預設 0.36 秒</button><p class="setting-note">設定自動保存。裝置啟用減少動畫時，會優先依裝置設定顯示。</p></section><section class="setting-card auto-name-setting"><div class="setting-toggle-row"><div><h2>自動命名新集合</h2><p>名稱留空時，以第一張選取圖片的檔名命名。</p></div><button role="switch" aria-label="自動命名新集合" :aria-checked="preferences.autoName" :class="{enabled:preferences.autoName}" @click="preferences.autoName=!preferences.autoName"><span></span></button></div><p class="setting-note">規則 <code>^([^\s-]+)</code>：取第一個空白或「-」之前的字串；手動輸入名稱時優先使用手動名稱。</p></section><TagManager v-model:tags="tags" @remove="removeTag" /><section class="setting-card"><div class="setting-title"><h2>封面快取</h2></div><p>封面會保存於裝置，讓下次開啟更快。若圖片已變更，可清除快取並重新整理。</p><button class="reset-setting" :disabled="cacheBusy" @click="refreshCovers">{{ cacheBusy ? '正在清除…' : '重新整理封面' }}</button><p v-if="cacheMessage" role="status" class="setting-note">{{ cacheMessage }}</p></section><section class="setting-card version-card"><span>ILSlides 版本</span><strong>{{ version }}</strong></section></section>
+    <section v-if="page==='settings'" class="settings-page"><div class="settings-heading"><button class="icon-button" @click="navigate(settingsReturn)" aria-label="返回設定前頁面"><ArrowLeft :size="20" /></button><h1>設定</h1></div><section class="setting-card"><div class="setting-title"><Images :size="21" /><h2>圖片轉場動畫</h2></div><p>調整左右瀏覽時，淡入淡出的動畫時間。</p><div class="duration-label"><label for="transition-duration">動畫時間</label><output>{{ (preferences.transitionMs/1000).toFixed(2) }} 秒</output></div><input id="transition-duration" type="range" min="100" max="2000" step="20" :value="preferences.transitionMs" @input="preferences.transitionMs=transitionTime(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>0.10 秒 · 快速</span><span>2.00 秒 · 緩慢</span></div><button class="reset-setting" @click="preferences.transitionMs=360">恢復預設 0.36 秒</button><p class="setting-note">設定自動保存。裝置啟用減少動畫時，會優先依裝置設定顯示。</p></section><section class="setting-card zoom-setting"><div class="setting-title"><Images :size="21" /><h2>雙擊放大倍率</h2></div><p>雙擊圖片指定位置放大，再次雙擊恢復完整圖片。單指左右滑動切圖，兩指縮放或移動查看區域。</p><div class="duration-label"><label for="double-tap-scale">放大倍率</label><output>{{ preferences.doubleTapScale.toFixed(2) }}×</output></div><input id="double-tap-scale" type="range" min="1.5" max="4" step="0.25" :value="preferences.doubleTapScale" @input="preferences.doubleTapScale=doubleTapScale(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>1.50×</span><span>4.00×</span></div><button class="reset-setting" @click="preferences.doubleTapScale=2">恢復預設 2 倍</button><p class="setting-note">切換圖片保留倍率與查看位置；重新開啟集合時恢復完整圖片。</p></section><section class="setting-card auto-name-setting"><div class="setting-toggle-row"><div><h2>自動命名新集合</h2><p>名稱留空時，以第一張選取圖片的檔名命名。</p></div><button role="switch" aria-label="自動命名新集合" :aria-checked="preferences.autoName" :class="{enabled:preferences.autoName}" @click="preferences.autoName=!preferences.autoName"><span></span></button></div><p class="setting-note">規則 <code>^([^\s-]+)</code>：取第一個空白或「-」之前的字串；手動輸入名稱時優先使用手動名稱。</p></section><TagManager v-model:tags="tags" @remove="removeTag" /><section class="setting-card"><div class="setting-title"><h2>封面快取</h2></div><p>封面會保存於裝置，讓下次開啟更快。若圖片已變更，可清除快取並重新整理。</p><button class="reset-setting" :disabled="cacheBusy" @click="refreshCovers">{{ cacheBusy ? '正在清除…' : '重新整理封面' }}</button><p v-if="cacheMessage" role="status" class="setting-note">{{ cacheMessage }}</p></section><section class="setting-card version-card"><span>ILSlides 版本</span><strong>{{ version }}</strong></section></section>
     <template v-else>
     <section v-if="page==='home'" class="stats"><div><strong>{{ collections.length.toString().padStart(2,'0') }}</strong><span>圖片集合</span></div><div class="stat-divider"></div><div><strong>{{ total.toLocaleString() }}</strong><span>張照片</span></div><span class="offline"><span></span>僅在裝置上讀取</span></section>
     <section v-if="page==='collections'" class="source-section"><div class="source-heading"><span><FolderOpen :size="15" />常用資料夾</span><button @click="edit()">管理／挑選圖片<ChevronRight :size="15" /></button></div><div class="folder-chips"><button v-for="f in folders" :key="f.uri" @click="edit(undefined,f)"><FolderOpen :size="14" />{{ f.name }}</button><button v-if="!folders.length" @click="edit()"><Plus :size="14" />記住圖片資料夾</button></div></section>
@@ -227,9 +225,9 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
     <footer><span class="footer-line"></span>留一點空間，給美好的日常<span class="footer-line"></span></footer>
     </template><nav class="bottom-bar" aria-label="主要導覽"><button @click="navigate('home')" :class="{selected:page==='home'}" :aria-current="page==='home' ? 'page' : undefined"><Home :size="21" />首頁</button><button @click="navigate('collections')" :class="{selected:page==='collections'}" :aria-current="page==='collections' ? 'page' : undefined"><Grid2X2 :size="21" />集合</button></nav>
   </main>
-  <main v-else class="viewer" :style="{'--transition-time':preferences.transitionMs+'ms'}" @touchstart.passive="start" @touchend.passive="end">
+  <main v-else class="viewer" :style="{'--transition-time':preferences.transitionMs+'ms'}">
     <header class="viewer-header" :class="{hidden:!controls}"><button class="icon-button" @click="close()" aria-label="返回集合"><ArrowLeft /></button><div><h2>{{ active.name }}</h2><span>{{ photos.length ? index+1 : 0 }} / {{ photos.length }}</span></div><button class="icon-button" @click="edit(active)" aria-label="編輯集合"><Pencil :size="20" /></button></header>
-    <div class="image-stage" @click="toggleControls"><Transition name="dissolve"><img v-if="displayed" :key="displayed" :src="displayed" :alt="displayedName" class="main-photo" /></Transition><span v-if="imageBusy" class="loading-indicator">讀取中</span><div v-if="!photos.length" class="viewer-empty"><Images :size="40" /><h2>集合中還沒有圖片</h2><p>編輯集合並挑選要加入的圖片。</p><button class="primary" @click.stop="edit(active)"><Plus :size="18" />挑選圖片</button></div></div>
+    <PhotoViewport ref="viewport" :src="displayed" :name="displayedName" :double-scale="preferences.doubleTapScale" :enabled="!modal && !coverEditor" @tap="toggleControls" @step="step"><span v-if="imageBusy" class="loading-indicator">讀取中</span><div v-if="!photos.length" class="viewer-empty"><Images :size="40" /><h2>集合中還沒有圖片</h2><p>編輯集合並挑選要加入的圖片。</p><button class="primary" @click.stop="edit(active)"><Plus :size="18" />挑選圖片</button></div></PhotoViewport>
 
   </main>
   <div v-if="error" class="toast" role="alert"><span>{{ error }}</span><button @click="error=''" aria-label="關閉訊息"><X :size="18" /></button></div>

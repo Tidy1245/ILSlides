@@ -1,5 +1,5 @@
 import { describe,it,expect,beforeEach } from 'vitest'
-import { sortCollections, filterCollections, transitionTime, loadPreferences } from './preferences'
+import { sortCollections, filterCollections, transitionTime, loadPreferences, doubleTapScale } from './preferences'
 import type { Collection } from './library'
 const rows=[{id:'b',name:'B',photos:[],createdAt:10,updatedAt:30},{id:'a',name:'A',photos:[],createdAt:30,updatedAt:10},{id:'c',name:'C',photos:[],createdAt:20,updatedAt:20}]
 beforeEach(()=>Object.assign(globalThis,{localStorage:{getItem:()=>null}}))
@@ -32,14 +32,20 @@ describe('集合排序與轉場設定',()=>{
   expect(transitionTime(-1)).toBe(100);expect(transitionTime(9000)).toBe(2000)
   expect(transitionTime(NaN)).toBe(360);expect(transitionTime(361)).toBe(360)
  })
+ it('雙擊倍率有預設、範圍與四分之一倍刻度，且可保存載入',()=>{
+  expect(doubleTapScale(undefined)).toBe(2);expect(doubleTapScale(NaN)).toBe(2)
+  expect(doubleTapScale(0)).toBe(1.5);expect(doubleTapScale(9)).toBe(4);expect(doubleTapScale(2.3)).toBe(2.25)
+  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({doubleTapScale:3.25})}})
+  expect(loadPreferences().doubleTapScale).toBe(3.25)
+ })
  it('停用自動命名後重新載入仍保持停用',()=>{
   Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({autoName:false})}})
   expect(loadPreferences().autoName).toBe(false)
  })
  it('載入有效設定並回退損壞設定',()=>{
-  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true})}})
-  expect(loadPreferences()).toEqual({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true})
+  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true,doubleTapScale:2})}})
+  expect(loadPreferences()).toEqual({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true,doubleTapScale:2})
   Object.assign(globalThis,{localStorage:{getItem:()=>'{invalid'}})
-  expect(loadPreferences()).toEqual({transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true})
+  expect(loadPreferences()).toEqual({transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true,doubleTapScale:2})
  })
 })
