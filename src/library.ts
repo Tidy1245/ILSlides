@@ -1,7 +1,7 @@
 import type { CoverSettings } from './cover'
 import { tagIds } from './tags'
 import { registerPlugin } from '@capacitor/core'
-export interface Photo { uri: string; name: string }
+export interface Photo { uri: string; name: string; modifiedAt?:number }
 export interface SourceFolder { uri: string; name: string }
 export interface Collection { id: string; name: string; photos: Photo[]; legacyTree?: string; cover?:CoverSettings; tagIds?:string[]; createdAt?:number; updatedAt?:number }
 export interface CachedCover { uri:string; sourceUri:string; signature:string; createdAt:number }

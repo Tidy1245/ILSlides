@@ -38,14 +38,20 @@ describe('集合排序與轉場設定',()=>{
   Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({doubleTapScale:3.25})}})
   expect(loadPreferences().doubleTapScale).toBe(3.25)
  })
+ it('挑圖排序與集合排序獨立保存，損壞值回預設',()=>{
+  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({sortKey:'createdAt',sortDirection:'asc',photoSortKey:'updatedAt',photoSortDirection:'desc'})}})
+  expect(loadPreferences().sortKey).toBe('createdAt');expect(loadPreferences().photoSortKey).toBe('updatedAt');expect(loadPreferences().photoSortDirection).toBe('desc')
+  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({photoSortKey:'createdAt',photoSortDirection:'invalid'})}})
+  expect(loadPreferences().photoSortKey).toBe('name');expect(loadPreferences().photoSortDirection).toBe('asc')
+ })
  it('停用自動命名後重新載入仍保持停用',()=>{
   Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({autoName:false})}})
   expect(loadPreferences().autoName).toBe(false)
  })
  it('載入有效設定並回退損壞設定',()=>{
-  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true,doubleTapScale:2})}})
-  expect(loadPreferences()).toEqual({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true,doubleTapScale:2})
+  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true,doubleTapScale:2,photoSortKey:'name',photoSortDirection:'asc'})}})
+  expect(loadPreferences()).toEqual({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true,doubleTapScale:2,photoSortKey:'name',photoSortDirection:'asc'})
   Object.assign(globalThis,{localStorage:{getItem:()=>'{invalid'}})
-  expect(loadPreferences()).toEqual({transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true,doubleTapScale:2})
+  expect(loadPreferences()).toEqual({transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true,doubleTapScale:2,photoSortKey:'name',photoSortDirection:'asc'})
  })
 })

@@ -11,6 +11,8 @@ import CollectionCover from './CollectionCover.vue'
 import TagManager from './TagManager.vue'
 import CollectionFilter from './CollectionFilter.vue'
 import PhotoViewport from './PhotoViewport.vue'
+import SelectedPhotos from './SelectedPhotos.vue'
+import { pickerPhotos } from './photo-picker'
 import { loadTags, tagStyle, type Tag } from './tags'
 import { coverKey, coverLoader } from './cover-cache'
 import { version } from '../package.json'
@@ -23,6 +25,7 @@ const index = ref(0)
 const displayed = ref('')
 const displayedName = ref('')
 const viewport=ref<InstanceType<typeof PhotoViewport>>()
+const selectedStrip=ref<InstanceType<typeof SelectedPhotos>>()
 const tags=ref(loadTags())
 const draftTags=ref<string[]>([]),coverEpoch=ref(0),cacheBusy=ref(false),cacheMessage=ref('')
 watch(tags,value=>{try {localStorage.setItem('ilslides.tags',JSON.stringify(value))} catch {error.value='標籤無法保存。'}},{deep:true})
@@ -75,7 +78,11 @@ const folderPhotos = ref<Photo[]>([])
 const draftPhotos = ref<Photo[]>([])
 const suggestedName = computed(() => !editId.value && preferences.value.autoName ? suggestCollectionName(draftPhotos.value[0]?.name) : '')
 const collectionName = computed(() => name.value.trim() || suggestedName.value)
-const folderBusy = ref(false)
+const folderBusy = ref(false),authorizationBusy=ref(false),folderQuery=ref(''),photoSortOpen=ref(false)
+const visibleFolderPhotos=computed(()=>pickerPhotos(folderPhotos.value,folderQuery.value,preferences.value.photoSortKey,preferences.value.photoSortDirection))
+function applyPhotoSort(value:{sortKey:typeof preferences.value.sortKey;sortDirection:typeof preferences.value.sortDirection}) {
+ preferences.value.photoSortKey=value.sortKey==='updatedAt' ? 'updatedAt' : 'name';preferences.value.photoSortDirection=value.sortDirection;photoSortOpen.value=false
+}
 let folderRequest = 0
 const controls = ref(true)
 const total = computed(() => collections.value.reduce((sum,c) => sum + c.photos.length, 0))
@@ -139,31 +146,34 @@ function edit(c?:Collection, folder?:SourceFolder) {
   editId.value=c?.id || null; name.value=c?.name || ''; draftPhotos.value=c ? [...c.photos] : []
   draftTags.value=(c?.tagIds || []).filter(id=>tags.value.some(t=>t.id===id))
   draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false; editorScrolled.value=false
-  selectedFolder.value=null; folderPhotos.value=[]; modal.value=true; error.value=''
+  selectedFolder.value=null; folderPhotos.value=[];folderQuery.value='';photoSortOpen.value=false; modal.value=true; error.value=''
   const initial=folder || folders.value[0]
   if(initial) void browseFolder(initial)
 }
 async function browseFolder(folder:SourceFolder) {
   const token=++folderRequest
-  selectedFolder.value=folder; folderPhotos.value=[]; folderBusy.value=true; error.value=''
+  selectedFolder.value=folder; folderPhotos.value=[];folderQuery.value=''; folderBusy.value=true; error.value=''
   try { const result=await Folders.list({tree:folder.uri}); if(token===folderRequest) folderPhotos.value=sortedPhotos(result.images) }
   catch(e) { if(token===folderRequest) error.value=`無法讀取資料夾，請重新授權此目錄。${message(e)}` }
   finally { if(token===folderRequest) folderBusy.value=false }
 }
 async function pick() {
   if(!Capacitor.isNativePlatform()) { error.value='請安裝 Android APK，使用系統目錄選擇器讀取手機圖片。'; return }
+  if(authorizationBusy.value) return
+  authorizationBusy.value=true
   try {
     const result=await Folders.pick()
     if(result.cancelled) return
     const folder={uri:result.uri,name:result.name}
     const pos=folders.value.findIndex(f=>f.uri===folder.uri)
     if(pos<0) folders.value.push(folder); else folders.value[pos]=folder
-    await browseFolder(folder)
+
   } catch(e) { error.value=`無法選擇目錄：${message(e)}` }
+  finally {authorizationBusy.value=false}
 }
 function selected(uri:string) { return draftPhotos.value.some(p=>p.uri===uri) }
 function toggle(p:Photo) { draftPhotos.value=selected(p.uri) ? draftPhotos.value.filter(v=>v.uri!==p.uri) : [...draftPhotos.value,p] }
-function selectAll() { draftPhotos.value=uniquePhotos([...draftPhotos.value,...folderPhotos.value]) }
+function selectAll() { draftPhotos.value=uniquePhotos([...draftPhotos.value,...visibleFolderPhotos.value]) }
 async function save() {
   if(!collectionName.value || !draftPhotos.value.length || busy.value) return
   const existing=collections.value.find(c=>c.id===editId.value)
@@ -184,13 +194,13 @@ function remove() {
   if(active.value?.id===editId.value) close()
   modal.value=false; deleting.value=false
 }
-watch(modal, () => { deleting.value=false; if(!modal.value) { ++folderRequest; folderBusy.value=false } })
-function keyboard(e:KeyboardEvent) { if(filterOpen.value) {if(e.key==='Escape') filterOpen.value=false;return}; if(coverEditor.value) { if(e.key==='Escape') coverEditor.value=false; return }; if(modal.value) { if(e.key==='Escape') modal.value=false; return }; if(active.value) { if(e.key==='ArrowRight') step(1); if(e.key==='ArrowLeft') step(-1); if(e.key==='Escape') close() } else if(e.key==='Escape' && page.value==='settings') navigate(settingsReturn) }
+watch(modal, () => { deleting.value=false; if(!modal.value) { ++folderRequest; folderBusy.value=false;photoSortOpen.value=false } })
+function keyboard(e:KeyboardEvent) { if(photoSortOpen.value) {if(e.key==='Escape') photoSortOpen.value=false;return};if(e.key==='Escape' && selectedStrip.value?.cancel()) return;if(filterOpen.value) {if(e.key==='Escape') filterOpen.value=false;return}; if(coverEditor.value) { if(e.key==='Escape') coverEditor.value=false; return }; if(modal.value) { if(e.key==='Escape') modal.value=false; return }; if(active.value) { if(e.key==='ArrowRight') step(1); if(e.key==='ArrowLeft') step(-1); if(e.key==='Escape') close() } else if(e.key==='Escape' && page.value==='settings') navigate(settingsReturn) }
 onMounted(async () => {
   window.addEventListener('keydown',keyboard)
   window.addEventListener('hashchange',changedHash)
   if(Capacitor.isNativePlatform()) {
-    const listener=await NativeApp.addListener('backButton', () => { if(filterOpen.value) filterOpen.value=false; else if(coverEditor.value) coverEditor.value=false; else if(modal.value) modal.value=false; else if(active.value) close(); else if(page.value==='settings') navigate(settingsReturn); else if(page.value==='collections') { if((document.scrollingElement?.scrollTop || window.scrollY)>1) window.scrollTo(0,0); else void NativeApp.exitApp() } else void NativeApp.exitApp() })
+    const listener=await NativeApp.addListener('backButton', () => { if(photoSortOpen.value) photoSortOpen.value=false;else if(selectedStrip.value?.cancel()) return;else if(filterOpen.value) filterOpen.value=false; else if(coverEditor.value) coverEditor.value=false; else if(modal.value) modal.value=false; else if(active.value) close(); else if(page.value==='settings') navigate(settingsReturn); else if(page.value==='collections') { if((document.scrollingElement?.scrollTop || window.scrollY)>1) window.scrollTo(0,0); else void NativeApp.exitApp() } else void NativeApp.exitApp() })
     removeBack=()=>void listener.remove()
     for(const c of collections.value) {
       if(c.legacyTree) {
@@ -207,10 +217,10 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
 <template>
   <main v-if="!active" class="library" :inert="filterOpen">
     <header class="topbar"><a class="brand" href="#/home" aria-label="ILSlides 首頁" @click.prevent="navigate('home')"><span class="brand-icon"><Images :size="21" /></span>ILSlides<span class="brand-dot"></span></a><button class="icon-button settings-button" @click="navigate('settings')" aria-label="開啟設定"><Settings :size="22" /></button></header>
-    <section v-if="page==='settings'" class="settings-page"><div class="settings-heading"><button class="icon-button" @click="navigate(settingsReturn)" aria-label="返回設定前頁面"><ArrowLeft :size="20" /></button><h1>設定</h1></div><section class="setting-card"><div class="setting-title"><Images :size="21" /><h2>圖片轉場動畫</h2></div><p>調整左右瀏覽時，淡入淡出的動畫時間。</p><div class="duration-label"><label for="transition-duration">動畫時間</label><output>{{ (preferences.transitionMs/1000).toFixed(2) }} 秒</output></div><input id="transition-duration" type="range" min="100" max="2000" step="20" :value="preferences.transitionMs" @input="preferences.transitionMs=transitionTime(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>0.10 秒 · 快速</span><span>2.00 秒 · 緩慢</span></div><button class="reset-setting" @click="preferences.transitionMs=360">恢復預設 0.36 秒</button><p class="setting-note">設定自動保存。裝置啟用減少動畫時，會優先依裝置設定顯示。</p></section><section class="setting-card zoom-setting"><div class="setting-title"><Images :size="21" /><h2>雙擊放大倍率</h2></div><p>雙擊圖片指定位置放大，再次雙擊恢復完整圖片。單指左右滑動切圖，兩指縮放或移動查看區域。</p><div class="duration-label"><label for="double-tap-scale">放大倍率</label><output>{{ preferences.doubleTapScale.toFixed(2) }}×</output></div><input id="double-tap-scale" type="range" min="1.5" max="4" step="0.25" :value="preferences.doubleTapScale" @input="preferences.doubleTapScale=doubleTapScale(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>1.50×</span><span>4.00×</span></div><button class="reset-setting" @click="preferences.doubleTapScale=2">恢復預設 2 倍</button><p class="setting-note">切換圖片保留倍率與查看位置；重新開啟集合時恢復完整圖片。</p></section><section class="setting-card auto-name-setting"><div class="setting-toggle-row"><div><h2>自動命名新集合</h2><p>名稱留空時，以第一張選取圖片的檔名命名。</p></div><button role="switch" aria-label="自動命名新集合" :aria-checked="preferences.autoName" :class="{enabled:preferences.autoName}" @click="preferences.autoName=!preferences.autoName"><span></span></button></div><p class="setting-note">規則 <code>^([^\s-]+)</code>：取第一個空白或「-」之前的字串；手動輸入名稱時優先使用手動名稱。</p></section><TagManager v-model:tags="tags" @remove="removeTag" /><section class="setting-card"><div class="setting-title"><h2>封面快取</h2></div><p>封面會保存於裝置，讓下次開啟更快。若圖片已變更，可清除快取並重新整理。</p><button class="reset-setting" :disabled="cacheBusy" @click="refreshCovers">{{ cacheBusy ? '正在清除…' : '重新整理封面' }}</button><p v-if="cacheMessage" role="status" class="setting-note">{{ cacheMessage }}</p></section><section class="setting-card version-card"><span>ILSlides 版本</span><strong>{{ version }}</strong></section></section>
+    <section v-if="page==='settings'" class="settings-page"><div class="settings-heading"><button class="icon-button" @click="navigate(settingsReturn)" aria-label="返回設定前頁面"><ArrowLeft :size="20" /></button><h1>設定</h1></div><section class="setting-card"><div class="setting-title"><Images :size="21" /><h2>圖片轉場動畫</h2></div><p>調整左右瀏覽時，淡入淡出的動畫時間。</p><div class="duration-label"><label for="transition-duration">動畫時間</label><output>{{ (preferences.transitionMs/1000).toFixed(2) }} 秒</output></div><input id="transition-duration" type="range" min="100" max="2000" step="20" :value="preferences.transitionMs" @input="preferences.transitionMs=transitionTime(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>0.10 秒 · 快速</span><span>2.00 秒 · 緩慢</span></div><button class="reset-setting" @click="preferences.transitionMs=360">恢復預設 0.36 秒</button><p class="setting-note">設定自動保存。裝置啟用減少動畫時，會優先依裝置設定顯示。</p></section><section class="setting-card folder-settings"><div class="setting-title"><FolderOpen :size="21" /><h2>圖片資料夾</h2></div><p>在這裡新增或重新授權圖片來源，再於集合中切換資料夾挑圖。</p><div v-if="folders.length" class="authorized-folders"><div v-for="folder in folders" :key="folder.uri"><FolderOpen :size="16" /><span>{{ folder.name }}</span></div></div><p v-else class="tag-hint">尚未授權圖片資料夾。</p><button class="folder-select" @click="pick" :disabled="authorizationBusy"><FolderOpen :size="23" /><span><strong>{{ authorizationBusy ? '正在選擇資料夾…' : '選擇／重新授權資料夾' }}</strong><small>保存讀取授權，原始圖片不會修改</small></span><Plus :size="18" /></button></section><section class="setting-card zoom-setting"><div class="setting-title"><Images :size="21" /><h2>雙擊放大倍率</h2></div><p>雙擊圖片指定位置放大，再次雙擊恢復完整圖片。單指左右滑動切圖，兩指縮放或移動查看區域。</p><div class="duration-label"><label for="double-tap-scale">放大倍率</label><output>{{ preferences.doubleTapScale.toFixed(2) }}×</output></div><input id="double-tap-scale" type="range" min="1.5" max="4" step="0.25" :value="preferences.doubleTapScale" @input="preferences.doubleTapScale=doubleTapScale(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>1.50×</span><span>4.00×</span></div><button class="reset-setting" @click="preferences.doubleTapScale=2">恢復預設 2 倍</button><p class="setting-note">切換圖片保留倍率與查看位置；重新開啟集合時恢復完整圖片。</p></section><section class="setting-card auto-name-setting"><div class="setting-toggle-row"><div><h2>自動命名新集合</h2><p>名稱留空時，以第一張選取圖片的檔名命名。</p></div><button role="switch" aria-label="自動命名新集合" :aria-checked="preferences.autoName" :class="{enabled:preferences.autoName}" @click="preferences.autoName=!preferences.autoName"><span></span></button></div><p class="setting-note">規則 <code>^([^\s-]+)</code>：取第一個空白或「-」之前的字串；手動輸入名稱時優先使用手動名稱。</p></section><TagManager v-model:tags="tags" @remove="removeTag" /><section class="setting-card"><div class="setting-title"><h2>封面快取</h2></div><p>封面會保存於裝置，讓下次開啟更快。若圖片已變更，可清除快取並重新整理。</p><button class="reset-setting" :disabled="cacheBusy" @click="refreshCovers">{{ cacheBusy ? '正在清除…' : '重新整理封面' }}</button><p v-if="cacheMessage" role="status" class="setting-note">{{ cacheMessage }}</p></section><section class="setting-card version-card"><span>ILSlides 版本</span><strong>{{ version }}</strong></section></section>
     <template v-else>
     <section v-if="page==='home'" class="stats"><div><strong>{{ collections.length.toString().padStart(2,'0') }}</strong><span>圖片集合</span></div><div class="stat-divider"></div><div><strong>{{ total.toLocaleString() }}</strong><span>張照片</span></div><span class="offline"><span></span>僅在裝置上讀取</span></section>
-    <section v-if="page==='collections'" class="source-section"><div class="source-heading"><span><FolderOpen :size="15" />常用資料夾</span><button @click="edit()">管理／挑選圖片<ChevronRight :size="15" /></button></div><div class="folder-chips"><button v-for="f in folders" :key="f.uri" @click="edit(undefined,f)"><FolderOpen :size="14" />{{ f.name }}</button><button v-if="!folders.length" @click="edit()"><Plus :size="14" />記住圖片資料夾</button></div></section>
+    <section v-if="page==='collections'" class="source-section"><div class="source-heading"><span><FolderOpen :size="15" />常用資料夾</span><button @click="edit()">管理／挑選圖片<ChevronRight :size="15" /></button></div><div class="folder-chips"><button v-for="f in folders" :key="f.uri" @click="edit(undefined,f)"><FolderOpen :size="14" />{{ f.name }}</button><button v-if="!folders.length" @click="navigate('settings')"><Plus :size="14" />到設定授權資料夾</button></div></section>
     <div class="section-heading"><div><h2>{{ page==='home' ? '最近的集合' : '我的集合' }} <span>{{ collections.length }}</span></h2><p>{{ page==='home' ? '最近修改的 4 筆集合' : '挑選喜歡的照片，組成你的故事' }}</p></div><button v-if="page==='collections'" class="add-button" @click="edit()"><Plus :size="18" />新增集合</button><button v-else class="add-button" @click="navigate('collections')">查看全部<ChevronRight :size="18" /></button></div>
     <div v-if="page==='collections'" class="collection-search-row"><div class="collection-search"><Search :size="18" /><input v-model="query" type="search" aria-label="搜尋集合" placeholder="搜尋集合名稱" /><button v-if="query" @click="query=''" aria-label="清除搜尋"><X :size="18" /></button></div><button class="filter-button" :class="{active:filterTags.length}" aria-label="篩選與排序" aria-haspopup="dialog" aria-controls="collection-filter" :aria-expanded="filterOpen" @click="filterOpen=true"><Funnel :size="21" /><span v-if="filterTags.length" aria-hidden="true">{{ filterTags.length }}</span></button></div>
     <p v-if="page==='collections' && collections.length && !filteredCollections.length" class="search-empty">{{ query.trim() ? '找不到符合「'+query+'」'+(filterTags.length ? '及目前篩選條件' : '')+'的集合。' : '沒有符合所選標籤的集合。' }}</p>
@@ -232,7 +242,7 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
   </main>
   <div v-if="error" class="toast" role="alert"><span>{{ error }}</span><button @click="error=''" aria-label="關閉訊息"><X :size="18" /></button></div>
   <div v-if="modal" class="modal-backdrop" @click.self="modal=false">
-    <section class="sheet collection-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <section class="sheet collection-sheet" :inert="photoSortOpen" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
       <div class="sheet-handle"></div><div class="sheet-heading"><div><span class="eyebrow">CURATE YOUR COLLECTION</span><h2 id="sheet-title">{{ editId ? '編輯集合' : '建立新的集合' }}</h2></div><button class="icon-button" @click="modal=false" aria-label="關閉"><X :size="21" /></button></div>
       <div class="editor-scroll-wrap"><div ref="editorScroll" class="editor-scroll" @scroll.passive="updateEditorScroll">
         <label class="field-label" for="collection-name">集合名稱</label><input id="collection-name" v-model="name" maxlength="60" placeholder="例如：旅行片刻、日常光影" />
@@ -243,11 +253,13 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
         <label class="field-label">集合封面</label><button class="folder-select" :disabled="!draftPhotos.length" @click="coverEditor=true"><Images :size="23" /><span><strong>{{ draftCover && selected(draftCover.uri) ? '調整已選封面' : '選擇封面與調整視窗' }}</strong><small>從集合圖片挑選，拖曳及縮放封面範圍</small></span><ChevronRight :size="18" /></button>
         <label class="field-label">常用資料夾</label>
         <div class="folder-chips"><button v-for="f in folders" :key="f.uri" :class="{chosen:selectedFolder?.uri===f.uri}" @click="browseFolder(f)"><FolderOpen :size="14" />{{ f.name }}</button></div>
-        <button class="folder-select" @click="pick" :disabled="folderBusy"><span class="folder-symbol"><FolderOpen :size="23" /></span><span><strong>選擇／重新授權資料夾</strong><small>記住此位置，下次可直接開啟挑圖</small></span><Plus :size="18" /></button>
-        <div v-if="draftPhotos.length" class="selection-summary"><div class="picker-heading"><span>已選 {{ draftPhotos.length }} 張（點擊可移除）</span><button @click="draftPhotos=[]">清空選取</button></div><div class="selected-strip"><button v-for="p in draftPhotos" :key="p.uri" @click="toggle(p)" :aria-label="`移除已選 ${p.name}`"><PhotoThumb :uri="p.uri" :name="p.name" /><span>{{ p.name }}</span><X :size="13" /></button></div></div>
-        <div class="picker-heading"><span>{{ selectedFolder?.name || '選擇資料夾後開始挑圖' }}</span><button v-if="folderPhotos.length" @click="selectAll">全選此資料夾</button></div>
+        <p v-if="!folders.length" class="tag-hint">尚未授權圖片資料夾，請先至設定頁新增。</p>
+        <div class="collection-search-row photo-search-row"><div class="collection-search"><Search :size="18" /><input v-model="folderQuery" type="search" aria-label="搜尋資料夾圖片" placeholder="搜尋圖片檔名" /><button v-if="folderQuery" @click="folderQuery=''" aria-label="清除圖片搜尋"><X :size="18" /></button></div><button class="filter-button" :class="{active:preferences.photoSortKey!=='name' || preferences.photoSortDirection!=='asc'}" aria-label="圖片篩選與排序" aria-haspopup="dialog" aria-controls="photo-sort" :aria-expanded="photoSortOpen" @click="photoSortOpen=true"><Funnel :size="21" /></button></div>
+        <div v-if="draftPhotos.length" class="selection-summary"><div class="picker-heading"><span>已選 {{ draftPhotos.length }} 張</span><button @click="draftPhotos=[]">清空選取</button></div><SelectedPhotos ref="selectedStrip" :photos="draftPhotos" @remove="toggle" @reorder="draftPhotos=$event" /></div>
+        <div class="picker-heading"><span>{{ selectedFolder?.name || '選擇資料夾後開始挑圖' }}</span><button v-if="visibleFolderPhotos.length" @click="selectAll">{{ folderQuery.trim() ? '全選搜尋結果' : '全選此資料夾' }}</button></div>
         <p v-if="folderBusy" class="picker-empty">正在讀取資料夾…</p><p v-else-if="selectedFolder && !folderPhotos.length" class="picker-empty">沒有可讀取的圖片；可選擇其他資料夾。</p>
-        <div class="photo-picker"><button v-for="p in folderPhotos" :key="p.uri" class="pick-photo" :class="{selected:selected(p.uri)}" @click="toggle(p)" :aria-label="`選取 ${p.name}`" :aria-pressed="selected(p.uri)"><PhotoThumb :uri="p.uri" :name="p.name" /><span class="pick-check"><Check v-if="selected(p.uri)" :size="15" /></span><span class="pick-name">{{ p.name }}</span></button></div>
+        <p v-if="!folderBusy && folderPhotos.length && !visibleFolderPhotos.length" class="picker-empty">找不到符合「{{ folderQuery }}」的圖片。</p>
+        <div class="photo-picker"><button v-for="p in visibleFolderPhotos" :key="p.uri" class="pick-photo" :class="{selected:selected(p.uri)}" @click="toggle(p)" :aria-label="`選取 ${p.name}`" :aria-pressed="selected(p.uri)"><PhotoThumb :uri="p.uri" :name="p.name" /><span class="pick-check"><Check v-if="selected(p.uri)" :size="15" /></span><span class="pick-name">{{ p.name }}</span></button></div>
         <p class="sheet-note">可切換資料夾繼續挑選；集合只保留你勾選的圖片。<br />資料夾新增圖片不會自動加入集合，原始檔案不會修改。</p>
 
       </div>
@@ -256,6 +268,7 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
       <button class="primary save-button" :disabled="!collectionName || !draftPhotos.length || busy" @click="save">{{ editId ? '儲存變更' : '建立集合' }} · {{ draftPhotos.length }} 張<ArrowRight :size="18" /></button>
     </section>
   </div>
+  <CollectionFilter v-if="photoSortOpen" photos :tags="[]" :selected="[]" :sort-key="preferences.photoSortKey" :sort-direction="preferences.photoSortDirection" @close="photoSortOpen=false" @apply="applyPhotoSort" />
   <CollectionFilter v-if="filterOpen" :tags="tags" :selected="filterTags" :sort-key="preferences.sortKey" :sort-direction="preferences.sortDirection" @close="filterOpen=false" @apply="applyFilter" />
   <CoverEditor v-if="coverEditor && draftPhotos.length" :photos="draftPhotos" :initial="draftCover && selected(draftCover.uri) ? draftCover : undefined" @close="coverEditor=false" @save="draftCover=$event; coverEditor=false" />
 </template>

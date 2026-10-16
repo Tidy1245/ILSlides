@@ -126,9 +126,10 @@ public class ImageFoldersPlugin extends Plugin {
                 Uri tree = Uri.parse(treeValue);
                 Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
                 JSArray images = new JSArray();
-                String[] projection = {DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE};
+                String[] projection = {DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_LAST_MODIFIED};
                 try (Cursor cursor = getContext().getContentResolver().query(children, projection, null, null, null)) {
                     if (cursor == null) throw new IllegalStateException("目錄無法讀取");
+                    int modifiedIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
                     while (cursor.moveToNext()) {
                         String mime = cursor.getString(2), name = cursor.getString(1);
                         if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) continue;
@@ -137,7 +138,9 @@ public class ImageFoldersPlugin extends Plugin {
                         if (!isImage) continue;
                         JSObject image = new JSObject();
                         image.put("uri", DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0)).toString());
-                        image.put("name", name == null ? "未命名圖片" : name); images.put(image);
+                        image.put("name", name == null ? "未命名圖片" : name);
+                        if (modifiedIndex>=0 && !cursor.isNull(modifiedIndex) && cursor.getLong(modifiedIndex)>0) image.put("modifiedAt",cursor.getLong(modifiedIndex));
+                        images.put(image);
                     }
                 }
                 JSObject value = new JSObject(); value.put("images", images); call.resolve(value);
