@@ -4,7 +4,7 @@
 
 ## 安裝
 
-前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-9.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
+前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-10.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
 
 ## 使用方式
 
@@ -68,6 +68,12 @@ npm run release:prepare -- 2.0.0 # 明確指定
 此工具同步 package.json、package-lock.json、Android versionName，並遞增 Android versionCode。一般建置不改版號。更新 AGENTS.md 與發布說明後，建置 APK、提交推送 main，再建立 GitHub Release 上傳 `ILSlides<版號>.apk` 與 `SHA256SUMS.txt`。
 
 UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`、`node scripts/cache-tags-smoke.mjs`、`node scripts/zoom-smoke.mjs`、`node scripts/picker-reorder-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
+
+## v1.0.10 驗證
+
+- 移除圖片瀏覽的「讀取中」提示，以及集合／資料夾挑圖搜尋框內建的重複清除叉號。
+- 62 項 TypeScript 單元測試、正式建置與 Chromium 驗證通過；延遲圖片讀取及前後切圖期間不顯示讀取提示，兩個搜尋框保留單一清除按鈕並可正常清空。
+- 5 項 Android 快取測試、APK 建置與 lint、版本／簽章／SHA-256 校驗通過。原生 bridge 使用模擬資料，未接 Android 實機。
 
 ## v1.0.9 驗證
 

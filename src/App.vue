@@ -64,7 +64,6 @@ const visibleCollections = computed(() => page.value==='home' ? sortCollections(
 const draftCover = ref<CoverSettings>()
 const coverEditor = ref(false)
 const busy = ref(false)
-const imageBusy = ref(false)
 const error = ref('')
 const modal = ref(false)
 const editorScroll = ref<HTMLElement>()
@@ -112,7 +111,6 @@ async function show() {
   const token = ++request
   const photo = current.value
   if(!photo) { displayed.value = ''; return }
-  imageBusy.value = true
   try {
     const data = await image(photo.uri)
     // Decode before changing layers so the fade never flashes an empty frame.
@@ -122,7 +120,6 @@ async function show() {
     const neighbor = photos.value[nextIndex(index.value,1,photos.value.length)]
     if(neighbor && neighbor.uri !== photo.uri) void image(neighbor.uri).catch(() => {})
   } catch(e) { if(token === request) { displayed.value=''; error.value = `無法讀取「${photo.name}」，請確認檔案仍存在。${message(e)}` } }
-  finally { if(token === request) imageBusy.value = false }
 }
 watch(index, show)
 async function open(c:Collection) {
@@ -136,7 +133,7 @@ async function open(c:Collection) {
 }
 async function close() {
   const returnPage=page.value,position=libraryScrollTop
-  ++request;active.value=null;photos.value=[];displayed.value='';imageBusy.value=false
+  ++request;active.value=null;photos.value=[];displayed.value=''
   await nextTick()
   if(!active.value && page.value===returnPage) window.scrollTo(0,position)
 }
@@ -237,7 +234,7 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
   </main>
   <main v-else class="viewer" :style="{'--transition-time':preferences.transitionMs+'ms'}">
     <header class="viewer-header" :class="{hidden:!controls}"><button class="icon-button" @click="close()" aria-label="返回集合"><ArrowLeft /></button><div><h2>{{ active.name }}</h2><span>{{ photos.length ? index+1 : 0 }} / {{ photos.length }}</span></div><button class="icon-button" @click="edit(active)" aria-label="編輯集合"><Pencil :size="20" /></button></header>
-    <PhotoViewport ref="viewport" :src="displayed" :name="displayedName" :double-scale="preferences.doubleTapScale" :enabled="!modal && !coverEditor" @tap="toggleControls" @step="step"><span v-if="imageBusy" class="loading-indicator">讀取中</span><div v-if="!photos.length" class="viewer-empty"><Images :size="40" /><h2>集合中還沒有圖片</h2><p>編輯集合並挑選要加入的圖片。</p><button class="primary" @click.stop="edit(active)"><Plus :size="18" />挑選圖片</button></div></PhotoViewport>
+    <PhotoViewport ref="viewport" :src="displayed" :name="displayedName" :double-scale="preferences.doubleTapScale" :enabled="!modal && !coverEditor" @tap="toggleControls" @step="step"><div v-if="!photos.length" class="viewer-empty"><Images :size="40" /><h2>集合中還沒有圖片</h2><p>編輯集合並挑選要加入的圖片。</p><button class="primary" @click.stop="edit(active)"><Plus :size="18" />挑選圖片</button></div></PhotoViewport>
 
   </main>
   <div v-if="error" class="toast" role="alert"><span>{{ error }}</span><button @click="error=''" aria-label="關閉訊息"><X :size="18" /></button></div>
