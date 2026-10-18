@@ -124,24 +124,26 @@ public class ImageFoldersPlugin extends Plugin {
         execute(() -> {
             try {
                 Uri tree = Uri.parse(treeValue);
-                Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
                 JSArray images = new JSArray();
-                String[] projection = {DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_LAST_MODIFIED};
-                try (Cursor cursor = getContext().getContentResolver().query(children, projection, null, null, null)) {
-                    if (cursor == null) throw new IllegalStateException("目錄無法讀取");
-                    int modifiedIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
-                    while (cursor.moveToNext()) {
-                        String mime = cursor.getString(2), name = cursor.getString(1);
-                        if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) continue;
-                        boolean isImage = mime != null && mime.startsWith("image/");
-                        if (!isImage && name != null) isImage = name.toLowerCase(java.util.Locale.ROOT).matches(".*\\.(jpg|jpeg|png|webp|gif|heic|heif|bmp|avif)$");
-                        if (!isImage) continue;
-                        JSObject image = new JSObject();
-                        image.put("uri", DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0)).toString());
-                        image.put("name", name == null ? "未命名圖片" : name);
-                        if (modifiedIndex>=0 && !cursor.isNull(modifiedIndex) && cursor.getLong(modifiedIndex)>0) image.put("modifiedAt",cursor.getLong(modifiedIndex));
-                        images.put(image);
+                for (ImageTreeScanner.Document document:ImageTreeScanner.scan(DocumentsContract.getTreeDocumentId(tree), parentId -> {
+                    Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parentId);
+                    java.util.List<ImageTreeScanner.Document> documents=new java.util.ArrayList<>();
+                    String[] projection={DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_LAST_MODIFIED};
+                    try (Cursor cursor=getContext().getContentResolver().query(children,projection,null,null,null)) {
+                        if (cursor==null) throw new IllegalStateException("目錄無法讀取");
+                        int modifiedIndex=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
+                        while (cursor.moveToNext()) {
+                            long modified=modifiedIndex>=0 && !cursor.isNull(modifiedIndex) ? cursor.getLong(modifiedIndex) : 0;
+                            documents.add(new ImageTreeScanner.Document(cursor.getString(0),cursor.getString(1),cursor.getString(2),modified));
+                        }
                     }
+                    return documents;
+                })) {
+                    JSObject image=new JSObject();
+                    image.put("uri",DocumentsContract.buildDocumentUriUsingTree(tree,document.id).toString());
+                    image.put("name",document.name==null ? "未命名圖片" : document.name);
+                    if (document.modifiedAt>0) image.put("modifiedAt",document.modifiedAt);
+                    images.put(image);
                 }
                 JSObject value = new JSObject(); value.put("images", images); call.resolve(value);
             } catch (Exception e) { call.reject("目錄授權已失效或目錄已移動，請重新選擇。", e); }

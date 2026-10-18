@@ -38,7 +38,8 @@ export function loadCollections(): Collection[] {
 }
 export function loadFolders(): SourceFolder[] {
   const folders=read('ilslides.folders').filter((f:any) => f && typeof f.uri==='string' && typeof f.name==='string') as SourceFolder[]
-  // Recover folder shortcuts from v1.0.0 without changing existing collections.
+  // Only migrate once; an explicitly saved list may have had shortcuts deleted.
+  try { if(localStorage.getItem('ilslides.folders')!==null) return folders } catch { return folders }
   for(const c of read('ilslides.collections') as any[]) {
     if(c && typeof c.tree==='string' && !folders.some(f=>f.uri===c.tree)) folders.push({uri:c.tree,name:c.folder || '圖片目錄'})
   }

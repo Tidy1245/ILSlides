@@ -40,6 +40,17 @@ describe('集合瀏覽', () => {
   expect(loadCollections()).toEqual([{id:'old',name:'舊回憶',photos:[],legacyTree:'old-uri'}])
   expect(loadFolders()).toEqual([{uri:'old-uri',name:'Travel'}])
  })
+ it('刪除最後一個捷徑後重開，不從舊集合恢復已刪除資料夾',()=>{
+  storage.set('ilslides.collections',JSON.stringify([{id:'old',name:'舊回憶',tree:'old-uri',folder:'Travel'}]))
+  storage.set('ilslides.folders','[]')
+  expect(loadFolders()).toEqual([])
+  expect(loadCollections()[0]!.legacyTree).toBe('old-uri')
+ })
+ it('明確保存的資料夾清單不重新加入舊捷徑',()=>{
+  storage.set('ilslides.collections',JSON.stringify([{id:'old',name:'舊回憶',tree:'deleted-uri'}]))
+  storage.set('ilslides.folders',JSON.stringify([{uri:'kept-uri',name:'保留'}]))
+  expect(loadFolders()).toEqual([{uri:'kept-uri',name:'保留'}])
+ })
  it('保留有效封面設定，來源移出集合時移除封面',()=>{
   const cover={uri:'a',x:.2,y:.7,zoom:2}
   storage.set('ilslides.collections',JSON.stringify([{id:'1',name:'收藏',photos:[{uri:'a',name:'a'}],cover}]))

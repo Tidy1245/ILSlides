@@ -8,7 +8,7 @@
 
 ## 使用方式
 
-1. 先至設定頁「圖片資料夾」點「選擇／重新授權資料夾」，選擇圖片來源。App 會記住資料夾，下次直接點常用資料夾即可開啟。
+1. 先至設定頁「圖片資料夾」點「選擇／重新授權資料夾」，選擇圖片來源。App 會記住資料夾，下次直接點常用資料夾即可開啟。選取的資料夾會一併讀取所有子目錄中的圖片。設定頁每個資料夾右側可刪除捷徑，確認後從常用清單移除；既有集合、圖片及其讀取授權保留，也可重新加入。
 2. 點底部右側「集合」，再點「新增集合」，可手動輸入名稱或留空使用自動命名。
 3. 在縮圖上勾選多張圖片；可跨資料夾繼續勾選。搜尋框可依檔名找圖，右側漏斗提供檔名／修改日期的遞增與遞減排序；不提供日期的圖片排最後。全選僅加入目前搜尋結果，排序獨立保存。
 4. 已選圖片長按約 450ms 後拖曳調整順序，拖到兩側可自動捲動；短按移除，一般滑動捲動清單。按返回／Escape 或系統取消會撤銷當次拖曳。點「建立集合」儲存，集合依已選圖片順序瀏覽。
@@ -35,7 +35,7 @@
 - Android Storage Access Framework 保存目錄讀取授權，原始圖片不複製、不上傳、不修改；另保存可重建的封面縮圖。
 - 新建集合會記錄建立／修改日期；編輯儲存只更新修改日期。日期保留供排序使用，卡片下方改顯示標籤；舊集合不捏造歷史日期。
 - 集合名稱、選取的圖片 URI、日期、標籤、設定與資料夾捷徑保存於裝置 WebView localStorage；清除 App 資料／解除安裝後需要重建。
-- 目錄挑圖預設依檔名自然排序，可改依修改日期排序，不遞迴讀取子目錄。集合按已選圖片順序瀏覽；左右循環。
+- 目錄挑圖預設依檔名自然排序，可改依修改日期排序，包含所有子目錄中的圖片；重複文件只列一次。集合按已選圖片順序瀏覽；左右循環。
 - 預設 360ms、可調整 100～2000ms 的淡入淡出，先解碼再切換並預讀下一張；尊重減少動畫設定。
 - 預覽長邊最多 2048 像素、封面最多 600、挑圖縮圖最多 320；原圖不變。
 - 原生 ImageDecoder 處理 EXIF 方向；格式依裝置解碼器而定，GIF 以靜態預覽顯示。
@@ -67,7 +67,16 @@ npm run release:prepare -- 2.0.0 # 明確指定
 
 此工具同步 package.json、package-lock.json、Android versionName，並遞增 Android versionCode。一般建置不改版號。更新 AGENTS.md 與發布說明後，建置 APK、提交推送 main，再建立 GitHub Release 上傳 `ILSlides<版號>.apk` 與 `SHA256SUMS.txt`。
 
-UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`、`node scripts/cache-tags-smoke.mjs`、`node scripts/zoom-smoke.mjs`、`node scripts/picker-reorder-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
+UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`、`node scripts/cache-tags-smoke.mjs`、`node scripts/zoom-smoke.mjs`、`node scripts/picker-reorder-smoke.mjs`、`node scripts/folder-settings-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
+
+## v1.0.11 驗證（待發布）
+
+- 程式碼已完成，本機 APK 簽章與 v1.0.10 不同；需於保存原簽章金鑰的電腦建置發布，才能覆蓋升級。版號已準備為 1.0.11／versionCode 12，此版本正式發布前不需再次遞增。
+- 設定頁新增資料夾捷徑刪除及取消／返回確認，移除後重新開啟仍維持刪除；既有集合圖片可繼續瀏覽。
+- 挑圖包含來源資料夾所有子目錄的圖片，保留檔名與修改日期供搜尋／排序；防止重複文件與循環目錄。
+- 64 項 TypeScript 單元測試、12 項 Android 單元測試（含 6 項遞迴掃描測試）、正式建置、APK 建置與 lint 通過。
+- 新增手機資料夾刪除回歸：取消、Escape／Android 返回、重開保存、舊資料不復活、既有集合讀圖與重新加入。
+- UI 原生 bridge 使用模擬資料，未接 Android 實機。
 
 ## v1.0.10 驗證
 
