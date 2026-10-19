@@ -1,8 +1,12 @@
 import type { Photo } from './library'
 import type { SortDirection } from './preferences'
+export function matchesFolder(photo:Photo,query:string) {
+ const name=query.trim().toLocaleLowerCase()
+ return !!name && !!photo.folderPath?.toLocaleLowerCase().includes(name)
+}
 export function pickerPhotos(photos:Photo[],query:string,key:'name'|'updatedAt',direction:SortDirection) {
  const name=query.trim().toLocaleLowerCase(),sign=direction==='asc' ? 1 : -1
- return photos.filter(p=>p.name.toLocaleLowerCase().includes(name)).sort((a,b)=>{
+ return photos.filter(p=>p.name.toLocaleLowerCase().includes(name) || matchesFolder(p,query)).sort((a,b)=>{
   if(key==='updatedAt') {
    const aDate=Number.isFinite(a.modifiedAt) && a.modifiedAt! > 0 ? a.modifiedAt! : 0,bDate=Number.isFinite(b.modifiedAt) && b.modifiedAt! > 0 ? b.modifiedAt! : 0
    if(!aDate && bDate) return 1

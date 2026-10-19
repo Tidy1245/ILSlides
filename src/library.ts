@@ -1,7 +1,7 @@
 import type { CoverSettings } from './cover'
 import { tagIds } from './tags'
 import { registerPlugin } from '@capacitor/core'
-export interface Photo { uri: string; name: string; modifiedAt?:number }
+export interface Photo { uri: string; name: string; modifiedAt?:number; folderName?:string; folderPath?:string }
 export interface SourceFolder { uri: string; name: string }
 export interface Collection { id: string; name: string; photos: Photo[]; legacyTree?: string; cover?:CoverSettings; tagIds?:string[]; createdAt?:number; updatedAt?:number }
 export interface CachedCover { uri:string; sourceUri:string; signature:string; createdAt:number }
@@ -20,9 +20,12 @@ export function nextIndex(index: number, delta: number, length: number) {
   return length ? (index + delta + length) % length : 0
 }
 export function uniquePhotos(photos: Photo[]) {
-  return [...new Map(photos.map(p => [p.uri, {uri:p.uri, name:p.name}])).values()]
+  return [...new Map(photos.map(p => [p.uri, {uri:p.uri, name:p.name,
+    ...(typeof p.folderName==='string' && p.folderName ? {folderName:p.folderName} : {}),
+    ...(typeof p.folderPath==='string' && p.folderPath ? {folderPath:p.folderPath} : {})}])).values()]
 }
-export function suggestCollectionName(fileName?:string) {
+export function suggestCollectionName(fileName?:string,folderName?:string) {
+  if(/^\d+$/.test(fileName?.replace(/\.[^.]+$/,'') || '') && folderName?.trim()) return folderName.trim()
   return fileName?.match(/^([^\s-]+)/)?.[1] || ''
 }
 function read(key: string): unknown[] {

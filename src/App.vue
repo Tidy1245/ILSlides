@@ -12,7 +12,7 @@ import TagManager from './TagManager.vue'
 import CollectionFilter from './CollectionFilter.vue'
 import PhotoViewport from './PhotoViewport.vue'
 import SelectedPhotos from './SelectedPhotos.vue'
-import { pickerPhotos } from './photo-picker'
+import { matchesFolder, pickerPhotos } from './photo-picker'
 import { loadTags, tagStyle, type Tag } from './tags'
 import { coverKey, coverLoader } from './cover-cache'
 import { version } from '../package.json'
@@ -84,7 +84,7 @@ const name = ref('')
 const selectedFolder = ref<SourceFolder | null>(null)
 const folderPhotos = ref<Photo[]>([])
 const draftPhotos = ref<Photo[]>([])
-const suggestedName = computed(() => !editId.value && preferences.value.autoName ? suggestCollectionName(draftPhotos.value[0]?.name) : '')
+const suggestedName = computed(() => !editId.value && preferences.value.autoName ? suggestCollectionName(draftPhotos.value[0]?.name,draftPhotos.value[0]?.folderName) : '')
 const collectionName = computed(() => name.value.trim() || suggestedName.value)
 const folderBusy = ref(false),authorizationBusy=ref(false),folderQuery=ref(''),photoSortOpen=ref(false)
 const visibleFolderPhotos=computed(()=>pickerPhotos(folderPhotos.value,folderQuery.value,preferences.value.photoSortKey,preferences.value.photoSortDirection))
@@ -260,12 +260,12 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
         <label class="field-label">常用資料夾</label>
         <div class="folder-chips"><button v-for="f in folders" :key="f.uri" :class="{chosen:selectedFolder?.uri===f.uri}" @click="browseFolder(f)"><FolderOpen :size="14" />{{ f.name }}</button></div>
         <p v-if="!folders.length" class="tag-hint">尚未授權圖片資料夾，請先至設定頁新增。</p>
-        <div class="collection-search-row photo-search-row"><div class="collection-search"><Search :size="18" /><input v-model="folderQuery" type="search" aria-label="搜尋資料夾圖片" placeholder="搜尋圖片檔名" /><button v-if="folderQuery" @click="folderQuery=''" aria-label="清除圖片搜尋"><X :size="18" /></button></div><button class="filter-button" :class="{active:preferences.photoSortKey!=='name' || preferences.photoSortDirection!=='asc'}" aria-label="圖片篩選與排序" aria-haspopup="dialog" aria-controls="photo-sort" :aria-expanded="photoSortOpen" @click="photoSortOpen=true"><Funnel :size="21" /></button></div>
+        <div class="collection-search-row photo-search-row"><div class="collection-search"><Search :size="18" /><input v-model="folderQuery" type="search" aria-label="搜尋資料夾圖片" placeholder="搜尋圖片檔名或目錄" /><button v-if="folderQuery" @click="folderQuery=''" aria-label="清除圖片搜尋"><X :size="18" /></button></div><button class="filter-button" :class="{active:preferences.photoSortKey!=='name' || preferences.photoSortDirection!=='asc'}" aria-label="圖片篩選與排序" aria-haspopup="dialog" aria-controls="photo-sort" :aria-expanded="photoSortOpen" @click="photoSortOpen=true"><Funnel :size="21" /></button></div>
         <div v-if="draftPhotos.length" class="selection-summary"><div class="picker-heading"><span>已選 {{ draftPhotos.length }} 張</span><button @click="draftPhotos=[]">清空選取</button></div><SelectedPhotos ref="selectedStrip" :photos="draftPhotos" @remove="toggle" @reorder="draftPhotos=$event" /></div>
         <div class="picker-heading"><span>{{ selectedFolder?.name || '選擇資料夾後開始挑圖' }}</span><button v-if="visibleFolderPhotos.length" @click="selectAll">{{ folderQuery.trim() ? '全選搜尋結果' : '全選此資料夾' }}</button></div>
         <p v-if="folderBusy" class="picker-empty">正在讀取資料夾…</p><p v-else-if="selectedFolder && !folderPhotos.length" class="picker-empty">沒有可讀取的圖片；可選擇其他資料夾。</p>
         <p v-if="!folderBusy && folderPhotos.length && !visibleFolderPhotos.length" class="picker-empty">找不到符合「{{ folderQuery }}」的圖片。</p>
-        <div class="photo-picker"><button v-for="p in visibleFolderPhotos" :key="p.uri" class="pick-photo" :class="{selected:selected(p.uri)}" @click="toggle(p)" :aria-label="`選取 ${p.name}`" :aria-pressed="selected(p.uri)"><PhotoThumb :uri="p.uri" :name="p.name" /><span class="pick-check"><Check v-if="selected(p.uri)" :size="15" /></span><span class="pick-name">{{ p.name }}</span></button></div>
+        <div class="photo-picker"><button v-for="p in visibleFolderPhotos" :key="p.uri" class="pick-photo" :class="{selected:selected(p.uri)}" @click="toggle(p)" :aria-label="matchesFolder(p,folderQuery) ? `選取 ${p.name}，目錄 ${p.folderPath}` : `選取 ${p.name}`" :aria-pressed="selected(p.uri)"><PhotoThumb :uri="p.uri" :name="p.name" /><span class="pick-check"><Check v-if="selected(p.uri)" :size="15" /></span><span v-if="matchesFolder(p,folderQuery)" class="pick-folder-name" :title="p.folderPath">{{ p.folderPath }}</span><span class="pick-name">{{ p.name }}</span></button></div>
         <p class="sheet-note">可切換資料夾繼續挑選；集合只保留你勾選的圖片。<br />資料夾新增圖片不會自動加入集合，原始檔案不會修改。</p>
 
       </div>

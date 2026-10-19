@@ -125,7 +125,13 @@ public class ImageFoldersPlugin extends Plugin {
             try {
                 Uri tree = Uri.parse(treeValue);
                 JSArray images = new JSArray();
-                for (ImageTreeScanner.Document document:ImageTreeScanner.scan(DocumentsContract.getTreeDocumentId(tree), parentId -> {
+                String rootId=DocumentsContract.getTreeDocumentId(tree);
+                String rootName="";
+                Uri rootDocument=DocumentsContract.buildDocumentUriUsingTree(tree,rootId);
+                try (Cursor cursor=getContext().getContentResolver().query(rootDocument,new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)) {
+                    if (cursor!=null && cursor.moveToFirst() && !cursor.isNull(0)) rootName=cursor.getString(0);
+                }
+                for (ImageTreeScanner.Document document:ImageTreeScanner.scan(rootId,rootName, parentId -> {
                     Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parentId);
                     java.util.List<ImageTreeScanner.Document> documents=new java.util.ArrayList<>();
                     String[] projection={DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_LAST_MODIFIED};
@@ -143,6 +149,8 @@ public class ImageFoldersPlugin extends Plugin {
                     image.put("uri",DocumentsContract.buildDocumentUriUsingTree(tree,document.id).toString());
                     image.put("name",document.name==null ? "未命名圖片" : document.name);
                     if (document.modifiedAt>0) image.put("modifiedAt",document.modifiedAt);
+                    if (!document.folderName.isEmpty()) image.put("folderName",document.folderName);
+                    if (!document.folderPath.isEmpty()) image.put("folderPath",document.folderPath);
                     images.put(image);
                 }
                 JSObject value = new JSObject(); value.put("images", images); call.resolve(value);

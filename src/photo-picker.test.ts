@@ -1,11 +1,21 @@
 import {describe,it,expect} from 'vitest'
-import {pickerPhotos,movePhoto} from './photo-picker'
+import {pickerPhotos,movePhoto,matchesFolder} from './photo-picker'
 const photos=[{uri:'10',name:'photo10.jpg',modifiedAt:1000},{uri:'2',name:'photo2.jpg',modifiedAt:3000},{uri:'1',name:'PHOTO1.jpg'},{uri:'4',name:'photo4.jpg',modifiedAt:0}]
 describe('挑圖搜尋、排序及已選順序',()=>{
  it('檔名搜尋忽略大小寫及前後空白，保留原始清單',()=>{
   expect(pickerPhotos(photos,' PHOTO1 ','name','asc').map(p=>p.uri)).toEqual(['1','10'])
   expect(pickerPhotos(photos,'missing','name','asc')).toEqual([])
   expect(photos.map(p=>p.uri)).toEqual(['10','2','1','4'])
+ })
+ it('搜尋子目錄或祖先目錄時包含其中圖片，即使檔名不含關鍵字',()=>{
+  const nested=[{uri:'a',name:'0.jpg',folderName:'蘋果',folderPath:'水果/蘋果'},
+   {uri:'b',name:'1.jpg',folderName:'梨子',folderPath:'水果/梨子'},
+   {uri:'c',name:'水果.jpg',folderName:'相簿'}]
+  expect(pickerPhotos(nested,' 蘋果 ','name','asc').map(p=>p.uri)).toEqual(['a'])
+  expect(pickerPhotos(nested,'水果','name','asc').map(p=>p.uri)).toEqual(['a','b','c'])
+  expect(matchesFolder(nested[0]!,'蘋果')).toBe(true)
+  expect(matchesFolder(nested[2]!,'水果')).toBe(false)
+  expect(pickerPhotos(nested,'','name','asc')).toHaveLength(3)
  })
  it('檔名採自然排序，遞增及遞減獨立於選取順序',()=>{
   expect(pickerPhotos(photos,'','name','asc').map(p=>p.uri)).toEqual(['1','2','4','10'])

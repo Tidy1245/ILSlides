@@ -14,6 +14,13 @@ describe('集合瀏覽', () => {
  it('無分隔符時保留完整檔名，包含副檔名',()=>{
   expect(suggestCollectionName('photo.jpg')).toBe('photo.jpg')
  })
+ it('純數字檔名改用所在目錄名稱，非純數字仍沿用原規則',()=>{
+  expect(suggestCollectionName('0.jpg','蘋果')).toBe('蘋果')
+  expect(suggestCollectionName('001.HEIC',' 蘋果 ')).toBe('蘋果')
+  expect(suggestCollectionName('123','根目錄')).toBe('根目錄')
+  expect(suggestCollectionName('123-photo.jpg','蘋果')).toBe('123')
+  expect(suggestCollectionName('123.jpg')).toBe('123.jpg')
+ })
  it('未選圖片或第一字元無法匹配時不產生名稱',()=>{
   expect(suggestCollectionName()).toBe('')
   expect(suggestCollectionName(' leading.jpg')).toBe('')
@@ -28,6 +35,12 @@ describe('集合瀏覽', () => {
  })
  it('同一圖片跨資料夾重複選取只保留一次', () => {
   expect(uniquePhotos([{uri:'a',name:'a'},{uri:'b',name:'b'},{uri:'a',name:'a'}]).map(p=>p.uri)).toEqual(['a','b'])
+ })
+ it('全選與保存仍保留圖片所在目錄，可供自動命名',()=>{
+  const selected=uniquePhotos([{uri:'a',name:'0.jpg',folderName:'蘋果',folderPath:'水果/蘋果'}])
+  expect(suggestCollectionName(selected[0]?.name,selected[0]?.folderName)).toBe('蘋果')
+  storage.set('ilslides.collections',JSON.stringify([{id:'1',name:'蘋果',photos:selected}]))
+  expect(loadCollections()[0]?.photos[0]).toEqual({uri:'a',name:'0.jpg',folderName:'蘋果',folderPath:'水果/蘋果'})
  })
  it('集合只載入所選圖片，來源資料夾獨立保存', () => {
   storage.set('ilslides.collections',JSON.stringify([{id:'1',name:'精選',photos:[{uri:'2',name:'photo2'}]}]))

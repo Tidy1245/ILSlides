@@ -12,11 +12,16 @@ final class ImageTreeScanner {
     static final String DIRECTORY = "vnd.android.document/directory";
 
     static final class Document {
-        final String id, name, mime;
+        final String id, name, mime, folderName, folderPath;
         final long modifiedAt;
 
         Document(String id, String name, String mime, long modifiedAt) {
+            this(id,name,mime,modifiedAt,"","");
+        }
+
+        Document(String id, String name, String mime, long modifiedAt, String folderName, String folderPath) {
             this.id=id; this.name=name; this.mime=mime; this.modifiedAt=modifiedAt;
+            this.folderName=folderName; this.folderPath=folderPath;
         }
 
         boolean isImage() {
@@ -27,16 +32,26 @@ final class ImageTreeScanner {
 
     interface Reader { List<Document> children(String parentId) throws Exception; }
 
-    static List<Document> scan(String rootId, Reader reader) throws Exception {
-        ArrayDeque<String> pending=new ArrayDeque<>();
+    private static final class Folder {
+        final String id, name, path;
+        Folder(String id, String name, String path) {this.id=id; this.name=name; this.path=path;}
+    }
+
+    static List<Document> scan(String rootId, String rootName, Reader reader) throws Exception {
+        ArrayDeque<Folder> pending=new ArrayDeque<>();
         Set<String> visited=new HashSet<>();
         List<Document> images=new ArrayList<>();
-        pending.add(rootId); visited.add(rootId);
+        pending.add(new Folder(rootId,rootName==null ? "" : rootName,"")); visited.add(rootId);
         while (!pending.isEmpty()) {
-            for (Document document:reader.children(pending.removeFirst())) {
+            Folder folder=pending.removeFirst();
+            for (Document document:reader.children(folder.id)) {
                 if (document.id==null || !visited.add(document.id)) continue;
-                if (DIRECTORY.equals(document.mime)) pending.addLast(document.id);
-                else if (document.isImage()) images.add(document);
+                if (DIRECTORY.equals(document.mime)) {
+                    String name=document.name==null || document.name.isEmpty() ? folder.name : document.name;
+                    String path=document.name==null || document.name.isEmpty() ? folder.path :
+                        folder.path.isEmpty() ? document.name : folder.path+"/"+document.name;
+                    pending.addLast(new Folder(document.id,name,path));
+                } else if (document.isImage()) images.add(new Document(document.id,document.name,document.mime,document.modifiedAt,folder.name,folder.path));
             }
         }
         return images;
