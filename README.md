@@ -4,7 +4,7 @@
 
 ## 安裝
 
-前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-10.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
+前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-11.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
 
 ## 使用方式
 
