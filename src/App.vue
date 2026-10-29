@@ -85,9 +85,43 @@ const busy = ref(false)
 const error = ref('')
 const modal = ref(false)
 const editorScroll = ref<HTMLElement>()
+const detailsScroll = ref<HTMLElement>()
+const editorStep = ref<0|1>(0)
 const editorScrolled = ref(false)
-function editorTop() { editorScroll.value?.scrollTo({top:0,behavior:'smooth'}) }
-function updateEditorScroll() { editorScrolled.value=(editorScroll.value?.scrollTop || 0)>1 }
+function currentEditorScroll() { return editorStep.value===0 ? editorScroll.value : detailsScroll.value }
+function editorTop() { currentEditorScroll()?.scrollTo({top:0,behavior:'smooth'}) }
+function updateEditorScroll() { editorScrolled.value=(currentEditorScroll()?.scrollTop || 0)>1 }
+function showEditorStep(step:0|1) {
+  if(editorStep.value===step) return
+  selectedStrip.value?.cancel()
+  editorStep.value=step
+  nextTick(updateEditorScroll)
+}
+let editorTouch:{id:number;x:number;y:number}|undefined
+function startEditorSwipe(e:TouchEvent) {
+  editorTouch=undefined
+  if(e.touches.length!==1 || (e.target as Element).closest('input, textarea, select, button:not(.pick-photo), .selected-strip, .folder-chips')) return
+  const touch=e.touches[0]!
+  editorTouch={id:touch.identifier,x:touch.clientX,y:touch.clientY}
+}
+function moveEditorSwipe(e:TouchEvent) {
+  if(!editorTouch) return
+  if(e.touches.length!==1) { editorTouch=undefined; return }
+  const touch=[...e.touches].find(t=>t.identifier===editorTouch?.id)
+  if(touch) {
+    const dx=touch.clientX-editorTouch.x,dy=touch.clientY-editorTouch.y
+    if(Math.abs(dx)>10 && Math.abs(dx)>Math.abs(dy)*1.4) e.preventDefault()
+  }
+}
+function endEditorSwipe(e:TouchEvent) {
+  if(!editorTouch) return
+  const touch=[...e.changedTouches].find(t=>t.identifier===editorTouch?.id)
+  if(touch) {
+    const dx=touch.clientX-editorTouch.x,dy=touch.clientY-editorTouch.y
+    if(Math.abs(dx)>65 && Math.abs(dx)>Math.abs(dy)*1.4) showEditorStep(dx<0 ? 1 : 0)
+  }
+  editorTouch=undefined
+}
 const editId = ref<string | null>(null)
 const name = ref('')
 const selectedFolder = ref<SourceFolder | null>(null)
@@ -162,7 +196,7 @@ function edit(c?:Collection, folder?:SourceFolder) {
   menuCollectionId.value=null
   editId.value=c?.id || null; name.value=c?.name || ''; draftPhotos.value=c ? [...c.photos] : []
   draftTags.value=(c?.tagIds || []).filter(id=>tags.value.some(t=>t.id===id))
-  draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false; editorScrolled.value=false
+  draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false; editorScrolled.value=false; editorStep.value=0; editorTouch=undefined
   selectedFolder.value=null; folderPhotos.value=[];folderQuery.value='';photoSortOpen.value=false; modal.value=true; error.value=''
   const initial=folder || folders.value[0]
   if(initial) void browseFolder(initial)
@@ -260,13 +294,9 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
   <div v-if="modal" class="modal-backdrop" @click.self="modal=false">
     <section class="sheet collection-sheet" :inert="photoSortOpen" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
       <div class="sheet-handle"></div><div class="sheet-heading"><div><span class="eyebrow">CURATE YOUR COLLECTION</span><h2 id="sheet-title">{{ editId ? '編輯集合' : '建立新的集合' }}</h2></div><button class="icon-button" @click="modal=false" aria-label="關閉"><X :size="21" /></button></div>
-      <div class="editor-scroll-wrap"><div ref="editorScroll" class="editor-scroll" @scroll.passive="updateEditorScroll">
-        <label class="field-label" for="collection-name">集合名稱</label><input id="collection-name" v-model="name" maxlength="60" placeholder="例如：旅行片刻、日常光影" />
-        <p v-if="!editId && !name.trim() && draftPhotos.length" class="auto-name-hint">{{ suggestedName ? '將自動命名為：' + suggestedName : preferences.autoName ? '檔名無法套用規則，請輸入集合名稱。' : '自動命名已停用，請輸入集合名稱。' }}</p>
-        <label class="field-label">集合標籤</label>
-        <div v-if="tags.length" class="tag-picker"><button v-for="tag in tags" :key="tag.id" class="tag-pill" :class="{chosen:draftTags.includes(tag.id)}" :style="tagStyle(tag)" :aria-label="'套用標籤 '+tag.name" :aria-pressed="draftTags.includes(tag.id)" @click="toggleTag(tag.id)"><span><Check v-if="draftTags.includes(tag.id)" :size="13" />{{ tag.name }}</span></button></div>
-        <p v-else class="tag-hint">可先至設定頁建立標籤。</p>
-        <label class="field-label">集合封面</label><button class="folder-select" :disabled="!draftPhotos.length" @click="coverEditor=true"><Images :size="23" /><span><strong>{{ draftCover && selected(draftCover.uri) ? '調整已選封面' : '選擇封面與調整視窗' }}</strong><small>從集合圖片挑選，拖曳及縮放封面範圍</small></span><ChevronRight :size="18" /></button>
+      <div class="editor-steps" aria-label="集合編輯步驟"><button :class="{current:editorStep===0}" :aria-current="editorStep===0 ? 'step' : undefined" aria-label="選擇圖片步驟" @click="showEditorStep(0)">1　選擇圖片</button><button :class="{current:editorStep===1}" :aria-current="editorStep===1 ? 'step' : undefined" aria-label="集合資訊步驟" @click="showEditorStep(1)">2　集合資訊</button></div>
+      <div class="editor-scroll-wrap"><div class="editor-pages" :class="{details:editorStep===1}" @touchstart.passive="startEditorSwipe" @touchmove="moveEditorSwipe" @touchend.passive="endEditorSwipe" @touchcancel="editorTouch=undefined">
+      <div ref="editorScroll" class="editor-scroll editor-page" :inert="editorStep!==0" @scroll.passive="updateEditorScroll">
         <label class="field-label">常用資料夾</label>
         <div class="folder-chips"><button v-for="f in folders" :key="f.uri" :class="{chosen:selectedFolder?.uri===f.uri}" @click="browseFolder(f)"><FolderOpen :size="14" />{{ f.name }}</button></div>
         <p v-if="!folders.length" class="tag-hint">尚未授權圖片資料夾，請先至設定頁新增。</p>
@@ -277,10 +307,17 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
         <p v-if="!folderBusy && folderPhotos.length && !visibleFolderPhotos.length" class="picker-empty">找不到符合「{{ folderQuery }}」的圖片。</p>
         <div class="photo-picker"><button v-for="p in visibleFolderPhotos" :key="p.uri" class="pick-photo" :class="{selected:selected(p.uri)}" @click="toggle(p)" :aria-label="matchesFolder(p,folderQuery) ? `選取 ${p.name}，目錄 ${p.folderPath}` : `選取 ${p.name}`" :aria-pressed="selected(p.uri)"><PhotoThumb :uri="p.uri" :name="p.name" /><span class="pick-check"><Check v-if="selected(p.uri)" :size="15" /></span><span v-if="matchesFolder(p,folderQuery)" class="pick-folder-name" :title="p.folderPath">{{ p.folderPath }}</span><span class="pick-name">{{ p.name }}</span></button></div>
         <p class="sheet-note">可切換資料夾繼續挑選；集合只保留你勾選的圖片。<br />資料夾新增圖片不會自動加入集合，原始檔案不會修改。</p>
-
       </div>
+      <div ref="detailsScroll" class="editor-scroll editor-page" :inert="editorStep!==1" @scroll.passive="updateEditorScroll">
+        <label class="field-label" for="collection-name">集合名稱</label><input id="collection-name" v-model="name" maxlength="60" placeholder="例如：旅行片刻、日常光影" />
+        <p v-if="!editId && !name.trim() && draftPhotos.length" class="auto-name-hint">{{ suggestedName ? '將自動命名為：' + suggestedName : preferences.autoName ? '檔名無法套用規則，請輸入集合名稱。' : '自動命名已停用，請輸入集合名稱。' }}</p>
+        <label class="field-label">集合標籤</label>
+        <div v-if="tags.length" class="tag-picker"><button v-for="tag in tags" :key="tag.id" class="tag-pill" :class="{chosen:draftTags.includes(tag.id)}" :style="tagStyle(tag)" :aria-label="'套用標籤 '+tag.name" :aria-pressed="draftTags.includes(tag.id)" @click="toggleTag(tag.id)"><span><Check v-if="draftTags.includes(tag.id)" :size="13" />{{ tag.name }}</span></button></div>
+        <p v-else class="tag-hint">可先至設定頁建立標籤。</p>
+        <label class="field-label">集合封面</label><button class="folder-select" :disabled="!draftPhotos.length" @click="coverEditor=true"><Images :size="23" /><span><strong>{{ draftCover && selected(draftCover.uri) ? '調整已選封面' : '選擇封面與調整視窗' }}</strong><small>從集合圖片挑選，拖曳及縮放封面範圍</small></span><ChevronRight :size="18" /></button>
+      </div></div>
       <button v-if="editorScrolled" class="editor-top-button" @click="editorTop" :aria-label="editId ? '回到編輯集合頂部' : '回到新增集合頂部'"><ArrowUp :size="22" /></button></div>
-      <button class="primary save-button" :disabled="!collectionName || !draftPhotos.length || busy" @click="save">{{ editId ? '儲存變更' : '建立集合' }} · {{ draftPhotos.length }} 張<ArrowRight :size="18" /></button>
+      <button class="primary save-button" :disabled="editorStep===1 && (!collectionName || !draftPhotos.length || busy)" @click="editorStep===0 ? showEditorStep(1) : save()">{{ editorStep===0 ? '下一步' : (editId ? '儲存變更' : '建立集合') + ' · ' + draftPhotos.length + ' 張' }}<ArrowRight :size="18" /></button>
     </section>
   </div>
   <CollectionFilter v-if="photoSortOpen" photos :tags="[]" :selected="[]" :sort-key="preferences.photoSortKey" :sort-direction="preferences.photoSortDirection" @close="photoSortOpen=false" @apply="applyPhotoSort" />

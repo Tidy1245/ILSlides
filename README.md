@@ -4,16 +4,16 @@
 
 ## 安裝
 
-前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-13.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
+前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-14.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
 
 ## 使用方式
 
 1. 先至設定頁「圖片資料夾」點「選擇／重新授權資料夾」，選擇圖片來源。App 會記住資料夾，下次直接點常用資料夾即可開啟。選取的資料夾會一併讀取所有子目錄中的圖片。設定頁每個資料夾右側可刪除捷徑，確認後從常用清單移除；既有集合、圖片及其讀取授權保留，也可重新加入。
-2. 點底部右側「集合」，再點「新增集合」，可手動輸入名稱或留空使用自動命名。
+2. 點底部右側「集合」，再點「新增集合」。第一頁挑選圖片，第二頁可手動輸入名稱或留空使用自動命名，兩頁可點步驟或左右滑動切換。
 3. 在縮圖上勾選多張圖片；可跨資料夾繼續勾選。搜尋框可依檔名或子目錄名稱找圖，輸入目錄名稱會列出目錄內圖片並標示相對目錄路徑；右側漏斗提供檔名／修改日期的遞增與遞減排序，不提供日期的圖片排最後。全選僅加入目前搜尋結果，排序獨立保存。
-4. 已選圖片長按約 450ms 後拖曳調整順序，拖到兩側可自動捲動；短按移除，一般滑動捲動清單。按返回／Escape 或系統取消會撤銷當次拖曳。點「建立集合」儲存，集合依已選圖片順序瀏覽。
+4. 已選圖片長按約 450ms 後拖曳調整順序，拖到兩側可自動捲動；短按移除，一般滑動捲動清單。按返回／Escape 或系統取消會撤銷當次拖曳。點「下一步」到集合資訊頁設定名稱、標籤和封面，再點「建立集合」儲存；集合依已選圖片順序瀏覽。
 5. 打開集合即以完整畫面顯示圖片；單指左右滑動切圖，兩指張開／捏合縮放（1～4 倍）、兩指同向移動平移查看區域。快速雙擊指定位置放大，再次雙擊恢復完整圖片；單擊約 280ms 後隱藏／顯示上方半透明標題列。下方說明及工具區已移除。返回首頁／集合頁時恢復原本捲動位置，搜尋及標籤條件保留。
-6. 集合卡片右下角的三小點可選擇「編輯集合」或「刪除集合」；刪除需確認且只刪集合設定，原始圖片保留。編輯集合同樣可搜尋、排序來源圖片及長按拖曳已選圖片，也可改名、增加圖片、取消勾選。
+6. 集合卡片右下角的三小點可選擇「編輯集合」或「刪除集合」；刪除需確認且只刪集合設定，原始圖片保留。編輯集合同樣分為挑圖及集合資訊兩頁，可搜尋、排序來源圖片、拖曳已選圖片，並改名或調整標籤、封面。
 7. 點「選擇封面與調整視窗」，從集合選一張圖片，在 4:3 視窗拖曳位置及縮放 1～3 倍；點「使用此封面」再儲存集合。取消調整不變更封面。封面圖片移出集合後回退至集合第一張。
 8. 點首頁「最近的集合」標題可切換「為你推薦」，從所有集合隨機挑選最多 4 筆；再點可切回最近修改的最多 4 筆。App 會記住上次模式。完整搜尋、新增、編輯、刪除與封面功能放在「集合」頁。
 9. 搜尋框右側漏斗按鈕開啟「篩選與排序」：依字母、建立日期、修改日期遞增／遞減排序並保存，或複選標籤（符合任一所選標籤），與名稱搜尋共同套用。按套用才生效，關閉／返回取消草稿；可重設條件。
@@ -67,7 +67,12 @@ npm run release:prepare -- 2.0.0 # 明確指定
 
 此工具同步 package.json、package-lock.json、Android versionName，並遞增 Android versionCode。一般建置不改版號。更新 AGENTS.md 與發布說明後，建置 APK、提交推送 main，再建立 GitHub Release 上傳 `ILSlides<版號>.apk` 與 `SHA256SUMS.txt`。
 
-UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`、`node scripts/cache-tags-smoke.mjs`、`node scripts/zoom-smoke.mjs`、`node scripts/picker-reorder-smoke.mjs`、`node scripts/folder-settings-smoke.mjs`、`node scripts/folder-name-search-smoke.mjs`、`node scripts/home-menu-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
+UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`、`node scripts/cache-tags-smoke.mjs`、`node scripts/zoom-smoke.mjs`、`node scripts/picker-reorder-smoke.mjs`、`node scripts/folder-settings-smoke.mjs`、`node scripts/folder-name-search-smoke.mjs`、`node scripts/home-menu-smoke.mjs`、`node scripts/editor-pages-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
+
+## v1.0.14 驗證
+
+- 新增／編輯集合分成挑圖與集合資訊兩頁，可點步驟或左右滑動切換；切頁時有水平轉場，第一頁底部為「下一步」。
+- 驗證結果與實機限制見 [v1.0.14 發布說明](docs/release-v1.0.14.md)。
 
 ## v1.0.13 驗證
 
@@ -119,9 +124,9 @@ UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke
 
 使用測試圖片，非 App 預載照片。
 
-| 選圖建立集合 | 集合首頁 |
+| 選擇圖片（第一頁） | 集合資訊（第二頁） |
 | --- | --- |
-| ![選圖](docs/create.png) | ![首頁](docs/collections.png) |
+| ![選擇圖片](docs/photo-search.png) | ![集合資訊](docs/create.png) |
 
 封面裁切操作：
 
