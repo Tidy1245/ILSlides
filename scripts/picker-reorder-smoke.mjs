@@ -5,6 +5,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const browser=await chromium.launch({channel:'chrome',headless:true})
 const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true})
 const errors=[];page.on('pageerror',e=>errors.push(e.message))
+async function editCollection(name){await page.getByRole('button',{name:`${name} 選項`}).click();await page.getByRole('menuitem',{name:'編輯集合'}).click()}
 await page.addInitScript(()=>{
  const data='data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450"><rect width="600" height="450" fill="#325b83"/><circle cx="400" cy="180" r="90" fill="#88b4e8"/></svg>')
  window.androidBridge={}
@@ -101,7 +102,7 @@ try {
  await page.getByLabel('集合名稱').fill('拖曳排序')
  await page.getByRole('button',{name:'建立集合 · 20 張'}).click()
  assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('ilslides.collections'))[0].photos.map(p=>p.uri)),order)
- await page.reload();await page.getByRole('button',{name:'編輯 拖曳排序',exact:true}).click()
+ await page.reload();await editCollection('拖曳排序')
  assert.deepEqual(await chosen(),order)
  await page.getByRole('button',{name:'圖片篩選與排序'}).click()
  assert.equal(await page.getByLabel('排序',{exact:true}).inputValue(),'updatedAt');assert.equal(await page.getByLabel('排序方向').inputValue(),'asc')

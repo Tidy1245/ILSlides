@@ -2,7 +2,7 @@
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
-import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, Trash2, ChevronRight, ArrowUp, Grid2X2, Check, Search, Settings, Home, Funnel } from 'lucide-vue-next'
+import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, Trash2, ChevronRight, ArrowUp, Grid2X2, Check, Search, Settings, Home, Funnel, Ellipsis, ArrowLeftRight } from 'lucide-vue-next'
 import { Folders, loadCollections, loadFolders, uniquePhotos, suggestCollectionName, sortedPhotos, nextIndex, type Collection, type Photo, type SourceFolder } from './library'
 import PhotoThumb from './PhotoThumb.vue'
 import CoverEditor from './CoverEditor.vue'
@@ -16,7 +16,7 @@ import { matchesFolder, pickerPhotos } from './photo-picker'
 import { loadTags, tagStyle, type Tag } from './tags'
 import { coverKey, coverLoader } from './cover-cache'
 import { version } from '../package.json'
-import { sortCollections, filterCollections, loadPreferences, transitionTime, doubleTapScale } from './preferences'
+import { sortCollections, filterCollections, loadPreferences, transitionTime, doubleTapScale, recommendedCollectionIds } from './preferences'
 const folders = ref(loadFolders())
 const deletingFolder = ref<string | null>(null)
 function removeFolder(folder:SourceFolder) {
@@ -55,12 +55,18 @@ async function refreshCovers() {
 type Page='home'|'collections'|'settings'
 function hashPage():Page { const route=location.hash.slice(2); return route==='collections' || route==='settings' ? route : 'home' }
 const page = ref<Page>(hashPage())
-watch(page,()=>{deletingFolder.value=null})
+watch(page,()=>{deletingFolder.value=null;menuCollectionId.value=null})
 let settingsReturn:Page='home'
 function navigate(next:Page) { if(next==='settings' && page.value!=='settings') settingsReturn=page.value; page.value=next; location.hash='/'+next; window.scrollTo(0,0) }
 function changedHash() { page.value=hashPage(); window.scrollTo(0,0) }
 const preferences = ref(loadPreferences())
 watch(preferences,value=>{ try {localStorage.setItem('ilslides.preferences',JSON.stringify(value))} catch {error.value='設定無法保存。'} },{deep:true})
+const recommendedIds=ref(recommendedCollectionIds(collections.value))
+watch(()=>collections.value.map(c=>c.id).join('\0'),()=>{recommendedIds.value=recommendedCollectionIds(collections.value)})
+function toggleHomeMode() {
+ preferences.value.homeMode=preferences.value.homeMode==='recent' ? 'recommended' : 'recent'
+ if(preferences.value.homeMode==='recommended') recommendedIds.value=recommendedCollectionIds(collections.value)
+}
 const query = ref('')
 const filterOpen=ref(false),filterTags=ref<string[]>([])
 function applyFilter(value:{tags:string[];sortKey:typeof preferences.value.sortKey;sortDirection:typeof preferences.value.sortDirection}) {
@@ -69,7 +75,10 @@ function applyFilter(value:{tags:string[];sortKey:typeof preferences.value.sortK
   window.scrollTo(0,0)
 }
 const filteredCollections = computed(() => sortCollections(filterCollections(collections.value,query.value,filterTags.value),preferences.value.sortKey,preferences.value.sortDirection))
-const visibleCollections = computed(() => page.value==='home' ? sortCollections(collections.value,'updatedAt','desc').slice(0,4) : filteredCollections.value)
+const visibleCollections = computed(() => page.value==='home' ? (preferences.value.homeMode==='recommended' ? recommendedIds.value.map(id=>collections.value.find(c=>c.id===id)).filter((c):c is Collection=>!!c) : sortCollections(collections.value,'updatedAt','desc').slice(0,4)) : filteredCollections.value)
+const menuCollectionId=ref<string|null>(null)
+const deleteTarget=ref<Collection|null>(null)
+function closeCollectionMenu(e:PointerEvent) { if(!(e.target instanceof Element) || !e.target.closest('.card-menu')) menuCollectionId.value=null }
 const draftCover = ref<CoverSettings>()
 const coverEditor = ref(false)
 const busy = ref(false)
@@ -133,6 +142,7 @@ async function show() {
 watch(index, show)
 async function open(c:Collection) {
   if(busy.value) return
+  menuCollectionId.value=null
   if(c.legacyTree) { error.value='舊集合尚未完成轉換，請編輯並選取要保留的圖片。'; return }
   libraryScrollTop=document.scrollingElement?.scrollTop || window.scrollY
   busy.value=true; error.value=''
@@ -149,6 +159,7 @@ async function close() {
 function step(delta:number) { if(photos.value.length > 1) { viewport.value?.cancel();error.value=''; index.value=nextIndex(index.value,delta,photos.value.length) } }
 function toggleControls() { controls.value=!controls.value }
 function edit(c?:Collection, folder?:SourceFolder) {
+  menuCollectionId.value=null
   editId.value=c?.id || null; name.value=c?.name || ''; draftPhotos.value=c ? [...c.photos] : []
   draftTags.value=(c?.tagIds || []).filter(id=>tags.value.some(t=>t.id===id))
   draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false; editorScrolled.value=false
@@ -191,22 +202,21 @@ async function save() {
   if(active.value?.id===c.id) { active.value=c; photos.value=[...c.photos]; index.value=0; await show() }
   if(existing && coverKey(existing)!==coverKey(c)) void coverLoader.remove(coverKey(existing)).catch(()=>{})
 }
-const deleting = ref(false)
 function remove() {
-  if(!editId.value) return
-  const removed=collections.value.find(c=>c.id===editId.value)
-  collections.value=collections.value.filter(c=>c.id!==editId.value)
+  if(!deleteTarget.value) return
+  const removed=collections.value.find(c=>c.id===deleteTarget.value?.id)
+  collections.value=collections.value.filter(c=>c.id!==deleteTarget.value?.id)
   if(removed) void coverLoader.remove(coverKey(removed)).catch(()=>{})
-  if(active.value?.id===editId.value) close()
-  modal.value=false; deleting.value=false
+  deleteTarget.value=null
 }
-watch(modal, () => { deleting.value=false; if(!modal.value) { ++folderRequest; folderBusy.value=false;photoSortOpen.value=false } })
-function keyboard(e:KeyboardEvent) { if(deletingFolder.value && e.key==='Escape') {deletingFolder.value=null;return};if(photoSortOpen.value) {if(e.key==='Escape') photoSortOpen.value=false;return};if(e.key==='Escape' && selectedStrip.value?.cancel()) return;if(filterOpen.value) {if(e.key==='Escape') filterOpen.value=false;return}; if(coverEditor.value) { if(e.key==='Escape') coverEditor.value=false; return }; if(modal.value) { if(e.key==='Escape') modal.value=false; return }; if(active.value) { if(e.key==='ArrowRight') step(1); if(e.key==='ArrowLeft') step(-1); if(e.key==='Escape') close() } else if(e.key==='Escape' && page.value==='settings') navigate(settingsReturn) }
+watch(modal, () => { if(!modal.value) { ++folderRequest; folderBusy.value=false;photoSortOpen.value=false } })
+function keyboard(e:KeyboardEvent) { if(deleteTarget.value && e.key==='Escape') {deleteTarget.value=null;return};if(menuCollectionId.value && e.key==='Escape') {menuCollectionId.value=null;return};if(deletingFolder.value && e.key==='Escape') {deletingFolder.value=null;return};if(photoSortOpen.value) {if(e.key==='Escape') photoSortOpen.value=false;return};if(e.key==='Escape' && selectedStrip.value?.cancel()) return;if(filterOpen.value) {if(e.key==='Escape') filterOpen.value=false;return}; if(coverEditor.value) { if(e.key==='Escape') coverEditor.value=false; return }; if(modal.value) { if(e.key==='Escape') modal.value=false; return }; if(active.value) { if(e.key==='ArrowRight') step(1); if(e.key==='ArrowLeft') step(-1); if(e.key==='Escape') close() } else if(e.key==='Escape' && page.value==='settings') navigate(settingsReturn) }
 onMounted(async () => {
   window.addEventListener('keydown',keyboard)
+  window.addEventListener('pointerdown',closeCollectionMenu)
   window.addEventListener('hashchange',changedHash)
   if(Capacitor.isNativePlatform()) {
-    const listener=await NativeApp.addListener('backButton', () => { if(deletingFolder.value) deletingFolder.value=null;else if(photoSortOpen.value) photoSortOpen.value=false;else if(selectedStrip.value?.cancel()) return;else if(filterOpen.value) filterOpen.value=false; else if(coverEditor.value) coverEditor.value=false; else if(modal.value) modal.value=false; else if(active.value) close(); else if(page.value==='settings') navigate(settingsReturn); else if(page.value==='collections') { if((document.scrollingElement?.scrollTop || window.scrollY)>1) window.scrollTo(0,0); else void NativeApp.exitApp() } else void NativeApp.exitApp() })
+    const listener=await NativeApp.addListener('backButton', () => { if(deleteTarget.value) deleteTarget.value=null;else if(menuCollectionId.value) menuCollectionId.value=null;else if(deletingFolder.value) deletingFolder.value=null;else if(photoSortOpen.value) photoSortOpen.value=false;else if(selectedStrip.value?.cancel()) return;else if(filterOpen.value) filterOpen.value=false; else if(coverEditor.value) coverEditor.value=false; else if(modal.value) modal.value=false; else if(active.value) close(); else if(page.value==='settings') navigate(settingsReturn); else if(page.value==='collections') { if((document.scrollingElement?.scrollTop || window.scrollY)>1) window.scrollTo(0,0); else void NativeApp.exitApp() } else void NativeApp.exitApp() })
     removeBack=()=>void listener.remove()
     for(const c of collections.value) {
       if(c.legacyTree) {
@@ -217,23 +227,23 @@ onMounted(async () => {
     }
   }
 })
-onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.removeEventListener('hashchange',changedHash); removeBack?.() })
+onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.removeEventListener('pointerdown',closeCollectionMenu); window.removeEventListener('hashchange',changedHash); removeBack?.() })
 </script>
 
 <template>
-  <main v-if="!active" class="library" :inert="filterOpen">
+  <main v-if="!active" class="library" :inert="filterOpen || !!deleteTarget">
     <header class="topbar"><a class="brand" href="#/home" aria-label="ILSlides 首頁" @click.prevent="navigate('home')"><span class="brand-icon"><Images :size="21" /></span>ILSlides<span class="brand-dot"></span></a><button class="icon-button settings-button" @click="navigate('settings')" aria-label="開啟設定"><Settings :size="22" /></button></header>
     <section v-if="page==='settings'" class="settings-page"><div class="settings-heading"><button class="icon-button" @click="navigate(settingsReturn)" aria-label="返回設定前頁面"><ArrowLeft :size="20" /></button><h1>設定</h1></div><section class="setting-card"><div class="setting-title"><Images :size="21" /><h2>圖片轉場動畫</h2></div><p>調整左右瀏覽時，淡入淡出的動畫時間。</p><div class="duration-label"><label for="transition-duration">動畫時間</label><output>{{ (preferences.transitionMs/1000).toFixed(2) }} 秒</output></div><input id="transition-duration" type="range" min="100" max="2000" step="20" :value="preferences.transitionMs" @input="preferences.transitionMs=transitionTime(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>0.10 秒 · 快速</span><span>2.00 秒 · 緩慢</span></div><button class="reset-setting" @click="preferences.transitionMs=360">恢復預設 0.36 秒</button><p class="setting-note">設定自動保存。裝置啟用減少動畫時，會優先依裝置設定顯示。</p></section><section class="setting-card folder-settings"><div class="setting-title"><FolderOpen :size="21" /><h2>圖片資料夾</h2></div><p>新增或重新授權圖片來源，包含所有子目錄中的圖片，再於集合中切換資料夾挑圖。</p><div v-if="folders.length" class="authorized-folders"><div v-for="folder in folders" :key="folder.uri"><div class="folder-setting-row"><FolderOpen :size="16" /><span>{{ folder.name }}</span><button class="icon-button folder-delete" :aria-label="`刪除資料夾 ${folder.name}`" @click="deletingFolder=folder.uri"><Trash2 :size="17" /></button></div><div v-if="deletingFolder===folder.uri" class="delete-confirm folder-delete-confirm"><p>確定刪除「{{ folder.name }}」資料夾捷徑？既有集合與原始圖片會保留。</p><button @click="deletingFolder=null">取消刪除資料夾</button><button class="danger" @click="removeFolder(folder)">確定刪除資料夾</button></div></div></div><p v-else class="tag-hint">尚未授權圖片資料夾。</p><button class="folder-select" @click="pick" :disabled="authorizationBusy"><FolderOpen :size="23" /><span><strong>{{ authorizationBusy ? '正在選擇資料夾…' : '選擇／重新授權資料夾' }}</strong><small>保存讀取授權，原始圖片不會修改</small></span><Plus :size="18" /></button></section><section class="setting-card zoom-setting"><div class="setting-title"><Images :size="21" /><h2>雙擊放大倍率</h2></div><p>雙擊圖片指定位置放大，再次雙擊恢復完整圖片。單指左右滑動切圖，兩指縮放或移動查看區域。</p><div class="duration-label"><label for="double-tap-scale">放大倍率</label><output>{{ preferences.doubleTapScale.toFixed(2) }}×</output></div><input id="double-tap-scale" type="range" min="1.5" max="4" step="0.25" :value="preferences.doubleTapScale" @input="preferences.doubleTapScale=doubleTapScale(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>1.50×</span><span>4.00×</span></div><button class="reset-setting" @click="preferences.doubleTapScale=2">恢復預設 2 倍</button><p class="setting-note">切換圖片保留倍率與查看位置；重新開啟集合時恢復完整圖片。</p></section><section class="setting-card auto-name-setting"><div class="setting-toggle-row"><div><h2>自動命名新集合</h2><p>名稱留空時，以第一張選取圖片的檔名命名。</p></div><button role="switch" aria-label="自動命名新集合" :aria-checked="preferences.autoName" :class="{enabled:preferences.autoName}" @click="preferences.autoName=!preferences.autoName"><span></span></button></div><p class="setting-note">規則 <code>^([^\s-]+)</code>：取第一個空白或「-」之前的字串；手動輸入名稱時優先使用手動名稱。</p></section><TagManager v-model:tags="tags" @remove="removeTag" /><section class="setting-card"><div class="setting-title"><h2>封面快取</h2></div><p>封面會保存於裝置，讓下次開啟更快。若圖片已變更，可清除快取並重新整理。</p><button class="reset-setting" :disabled="cacheBusy" @click="refreshCovers">{{ cacheBusy ? '正在清除…' : '重新整理封面' }}</button><p v-if="cacheMessage" role="status" class="setting-note">{{ cacheMessage }}</p></section><section class="setting-card version-card"><span>ILSlides 版本</span><strong>{{ version }}</strong></section></section>
     <template v-else>
     <section v-if="page==='home'" class="stats"><div><strong>{{ collections.length.toString().padStart(2,'0') }}</strong><span>圖片集合</span></div><div class="stat-divider"></div><div><strong>{{ total.toLocaleString() }}</strong><span>張照片</span></div><span class="offline"><span></span>僅在裝置上讀取</span></section>
     <section v-if="page==='collections'" class="source-section"><div class="source-heading"><span><FolderOpen :size="15" />常用資料夾</span><button @click="edit()">管理／挑選圖片<ChevronRight :size="15" /></button></div><div class="folder-chips"><button v-for="f in folders" :key="f.uri" @click="edit(undefined,f)"><FolderOpen :size="14" />{{ f.name }}</button><button v-if="!folders.length" @click="navigate('settings')"><Plus :size="14" />到設定授權資料夾</button></div></section>
-    <div class="section-heading"><div><h2>{{ page==='home' ? '最近的集合' : '我的集合' }} <span>{{ collections.length }}</span></h2><p>{{ page==='home' ? '最近修改的 4 筆集合' : '挑選喜歡的照片，組成你的故事' }}</p></div><button v-if="page==='collections'" class="add-button" @click="edit()"><Plus :size="18" />新增集合</button><button v-else class="add-button" @click="navigate('collections')">查看全部<ChevronRight :size="18" /></button></div>
+    <div class="section-heading"><div><h2><button v-if="page==='home'" class="home-mode-toggle" :aria-label="`切換至${preferences.homeMode==='recent' ? '為你推薦' : '最近的集合'}`" @click="toggleHomeMode">{{ preferences.homeMode==='recent' ? '最近的集合' : '為你推薦' }}<ArrowLeftRight :size="15" /></button><template v-else>我的集合</template> <span>{{ collections.length }}</span></h2><p>{{ page==='home' ? (preferences.homeMode==='recent' ? '最近修改的 4 筆集合' : '從所有集合隨機挑選 4 筆') : '挑選喜歡的照片，組成你的故事' }}</p></div><button v-if="page==='collections'" class="add-button" @click="edit()"><Plus :size="18" />新增集合</button><button v-else class="add-button" @click="navigate('collections')">查看全部<ChevronRight :size="18" /></button></div>
     <div v-if="page==='collections'" class="collection-search-row"><div class="collection-search"><Search :size="18" /><input v-model="query" type="search" aria-label="搜尋集合" placeholder="搜尋集合名稱" /><button v-if="query" @click="query=''" aria-label="清除搜尋"><X :size="18" /></button></div><button class="filter-button" :class="{active:filterTags.length}" aria-label="篩選與排序" aria-haspopup="dialog" aria-controls="collection-filter" :aria-expanded="filterOpen" @click="filterOpen=true"><Funnel :size="21" /><span v-if="filterTags.length" aria-hidden="true">{{ filterTags.length }}</span></button></div>
     <p v-if="page==='collections' && collections.length && !filteredCollections.length" class="search-empty">{{ query.trim() ? '找不到符合「'+query+'」'+(filterTags.length ? '及目前篩選條件' : '')+'的集合。' : '沒有符合所選標籤的集合。' }}</p>
     <section v-if="collections.length" class="collection-grid">
       <article v-for="(c,i) in visibleCollections" :key="c.id" class="collection-card">
         <button class="card-open" @click="open(c)" :disabled="busy" :aria-label="`開啟 ${c.name}`"><CollectionCover :key="c.id+':'+coverEpoch" :collection="c" :class="`cover-${i%3}`"><span class="photo-count"><Images :size="13" />{{ c.photos.length }} 張</span><span class="open-indicator"><ChevronRight :size="20" /></span></CollectionCover><div class="card-copy"><h3>{{ c.name }}</h3><div class="collection-tags"><span v-for="tag in collectionTags(c)" :key="tag.id" class="tag-pill" :style="tagStyle(tag)"><span>{{ tag.name }}</span></span></div></div></button>
-        <button v-if="page==='collections'" class="card-edit icon-button" @click="edit(c)" :aria-label="`編輯 ${c.name}`"><Pencil :size="16" /></button>
+        <div v-if="page==='collections'" class="card-menu"><button class="card-edit icon-button" @click="menuCollectionId=menuCollectionId===c.id ? null : c.id" :aria-label="`${c.name} 選項`" aria-haspopup="menu" :aria-expanded="menuCollectionId===c.id"><Ellipsis :size="21" /></button><div v-if="menuCollectionId===c.id" class="card-menu-panel" role="menu"><button role="menuitem" @click="edit(c)"><Pencil :size="15" />編輯集合</button><button role="menuitem" @click="menuCollectionId=null;deleteTarget=c"><Trash2 :size="15" />刪除集合</button></div></div>
       </article>
       <button v-if="page==='collections'" class="new-card" @click="edit()"><span><Plus :size="26" /></span><strong>新的故事</strong><small>新增你的圖片集合</small></button>
     </section>
@@ -270,11 +280,11 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
 
       </div>
       <button v-if="editorScrolled" class="editor-top-button" @click="editorTop" :aria-label="editId ? '回到編輯集合頂部' : '回到新增集合頂部'"><ArrowUp :size="22" /></button></div>
-      <div v-if="editId" class="editor-delete"><button v-if="!deleting" class="delete-button" @click="deleting=true"><Trash2 :size="16" />刪除集合</button><div v-else class="delete-confirm"><p>確定刪除此集合？原始圖片會保留。</p><button @click="deleting=false">取消刪除</button><button class="danger" @click="remove">確定刪除</button></div></div>
       <button class="primary save-button" :disabled="!collectionName || !draftPhotos.length || busy" @click="save">{{ editId ? '儲存變更' : '建立集合' }} · {{ draftPhotos.length }} 張<ArrowRight :size="18" /></button>
     </section>
   </div>
   <CollectionFilter v-if="photoSortOpen" photos :tags="[]" :selected="[]" :sort-key="preferences.photoSortKey" :sort-direction="preferences.photoSortDirection" @close="photoSortOpen=false" @apply="applyPhotoSort" />
   <CollectionFilter v-if="filterOpen" :tags="tags" :selected="filterTags" :sort-key="preferences.sortKey" :sort-direction="preferences.sortDirection" @close="filterOpen=false" @apply="applyFilter" />
   <CoverEditor v-if="coverEditor && draftPhotos.length" :photos="draftPhotos" :initial="draftCover && selected(draftCover.uri) ? draftCover : undefined" @close="coverEditor=false" @save="draftCover=$event; coverEditor=false" />
+  <div v-if="deleteTarget" class="modal-backdrop collection-delete-backdrop" @click.self="deleteTarget=null"><section class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-collection-title"><h2 id="delete-collection-title">刪除「{{ deleteTarget.name }}」？</h2><p>此集合會移除，原始圖片會保留。</p><div><button @click="deleteTarget=null">取消刪除</button><button class="danger" @click="remove">確定刪除</button></div></section></div>
 </template>

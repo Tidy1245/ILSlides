@@ -1,9 +1,23 @@
 import { describe,it,expect,beforeEach } from 'vitest'
-import { sortCollections, filterCollections, transitionTime, loadPreferences, doubleTapScale } from './preferences'
+import { sortCollections, filterCollections, transitionTime, loadPreferences, doubleTapScale, recommendedCollectionIds } from './preferences'
 import type { Collection } from './library'
 const rows=[{id:'b',name:'B',photos:[],createdAt:10,updatedAt:30},{id:'a',name:'A',photos:[],createdAt:30,updatedAt:10},{id:'c',name:'C',photos:[],createdAt:20,updatedAt:20}]
 beforeEach(()=>Object.assign(globalThis,{localStorage:{getItem:()=>null}}))
 describe('集合排序與轉場設定',()=>{
+ it('首頁推薦從所有集合抽四筆且不重複，集合不足四筆時全數顯示',()=>{
+  const many=Array.from({length:8},(_,i)=>({id:String(i),name:String(i),photos:[]}))
+  expect(recommendedCollectionIds(many,()=>0)).toEqual(['0','1','2','3'])
+  expect(recommendedCollectionIds(many,()=>0.99)).toHaveLength(4)
+  expect(new Set(recommendedCollectionIds(many,()=>0.99)).size).toBe(4)
+  expect(recommendedCollectionIds(rows,()=>0.5).sort()).toEqual(['a','b','c'])
+  expect(recommendedCollectionIds([],()=>0)).toEqual([])
+ })
+ it('首頁模式保存後重新開啟仍維持推薦，舊設定預設最近集合',()=>{
+  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({homeMode:'recommended'})}})
+  expect(loadPreferences().homeMode).toBe('recommended')
+  Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({homeMode:'invalid'})}})
+  expect(loadPreferences().homeMode).toBe('recent')
+ })
  it('未選標籤時保留全部，搜尋忽略大小寫及前後空白',()=>{
   expect(filterCollections(rows,'',[])).toEqual(rows)
   expect(filterCollections(rows,'  b ',[]).map(c=>c.id)).toEqual(['b'])
@@ -50,8 +64,8 @@ describe('集合排序與轉場設定',()=>{
  })
  it('載入有效設定並回退損壞設定',()=>{
   Object.assign(globalThis,{localStorage:{getItem:()=>JSON.stringify({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true,doubleTapScale:2,photoSortKey:'name',photoSortDirection:'asc'})}})
-  expect(loadPreferences()).toEqual({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true,doubleTapScale:2,photoSortKey:'name',photoSortDirection:'asc'})
+  expect(loadPreferences()).toEqual({transitionMs:1200,sortKey:'updatedAt',sortDirection:'desc',autoName:true,doubleTapScale:2,photoSortKey:'name',photoSortDirection:'asc',homeMode:'recent'})
   Object.assign(globalThis,{localStorage:{getItem:()=>'{invalid'}})
-  expect(loadPreferences()).toEqual({transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true,doubleTapScale:2,photoSortKey:'name',photoSortDirection:'asc'})
+  expect(loadPreferences()).toEqual({transitionMs:360,sortKey:'name',sortDirection:'asc',autoName:true,doubleTapScale:2,photoSortKey:'name',photoSortDirection:'asc',homeMode:'recent'})
  })
 })

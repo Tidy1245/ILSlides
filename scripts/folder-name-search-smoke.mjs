@@ -5,6 +5,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const browser=await chromium.launch({channel:'chrome',headless:true})
 const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true})
 const errors=[];page.on('pageerror',e=>errors.push(e.message))
+async function editCollection(name){await page.getByRole('button',{name:`${name} 選項`}).click();await page.getByRole('menuitem',{name:'編輯集合'}).click()}
 await page.addInitScript(()=>{
  localStorage.setItem('ilslides.folders',JSON.stringify([{uri:'content://root',name:'相簿'}]))
  const data='data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450"><rect width="600" height="450" fill="#325b83"/></svg>')
@@ -35,7 +36,7 @@ try {
  let saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('ilslides.collections')))
  assert.equal(saved[0].name,'蘋果')
  assert.equal(saved[0].photos[0].folderName,'蘋果')
- await page.getByRole('button',{name:'編輯 蘋果'}).click()
+ await editCollection('蘋果')
  await search.fill('水果')
  assert.equal(await page.locator('.pick-photo').count(),3,'Ancestor directory and filename matches must both appear')
  assert.deepEqual(await page.locator('.pick-folder-name').allTextContents(),['水果/蘋果','水果/梨子'])

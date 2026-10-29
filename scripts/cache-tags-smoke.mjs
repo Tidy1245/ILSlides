@@ -4,6 +4,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const browser=await chromium.launch({channel:'chrome',headless:true})
 const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true})
 const errors=[];page.on('pageerror',e=>errors.push(e.message))
+async function editCollection(name){await page.getByRole('button',{name:`${name} 選項`}).click();await page.getByRole('menuitem',{name:'編輯集合'}).click()}
 await page.addInitScript(()=>{
  const image='data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450"><rect width="600" height="450" fill="#325b83"/><circle cx="400" cy="180" r="90" fill="#88b4e8"/></svg>')
  window.androidBridge={}
@@ -67,7 +68,7 @@ try {
  await page.reload()
  await page.locator('.collection-card').filter({hasText:'標籤測試'}).locator('.tag-pill').first().waitFor()
  await page.getByRole('button',{name:'集合',exact:true}).click()
- await page.getByRole('button',{name:'編輯 標籤測試',exact:true}).click()
+ await editCollection('標籤測試')
  if(await page.getByRole('button',{name:'套用標籤 旅行'}).getAttribute('aria-pressed')!=='true')throw Error('Tag selection not persisted')
  await page.getByRole('button',{name:'套用標籤 家人'}).click()
  await page.getByRole('button',{name:'儲存變更 · 1 張'}).click()
