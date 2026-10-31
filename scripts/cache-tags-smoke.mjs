@@ -4,7 +4,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const browser=await chromium.launch({channel:'chrome',headless:true})
 const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true})
 const errors=[];page.on('pageerror',e=>errors.push(e.message))
-async function editCollection(name){await page.getByRole('button',{name:`${name} 選項`}).click();await page.getByRole('menuitem',{name:'編輯集合'}).click()}
+async function editCollection(name){await page.getByRole('button',{name:`${name} 選項`}).click();await page.getByRole('menuitem',{name:'編輯集合'}).click(); await page.getByRole('button',{name:'選擇圖片步驟'}).click() }
 await page.addInitScript(()=>{
  const image='data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450"><rect width="600" height="450" fill="#325b83"/><circle cx="400" cy="180" r="90" fill="#88b4e8"/></svg>')
  window.androidBridge={}

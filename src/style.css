@@ -22,3 +22,5 @@
 .collection-search input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;display:none}
 .pick-folder-name{position:absolute;left:3px;right:3px;bottom:25px;padding:4px 5px;border-radius:5px;background:#102e57dc;color:#d4e8ff;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .authorized-folders>div{display:block;padding:6px 8px 6px 12px}.folder-setting-row{display:flex;align-items:center;gap:9px;min-width:0}.folder-setting-row>svg{flex-shrink:0}.folder-setting-row>span{flex:1;min-width:0}.folder-delete{color:#e1a2b3}.folder-delete-confirm{border-top:1px solid #304461;padding:8px 0;margin:4px 0 0}.folder-delete-confirm p{line-height:1.8;overflow-wrap:anywhere}.folder-delete-confirm button{min-height:44px}
+
+.tag-position{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;font-size:9px;color:#9eb5d5;margin-right:5px}.tag-position input{width:52px;min-height:44px;padding:8px 4px;text-align:center;font-size:12px;border-radius:10px}.tag-row>.tag-pill{min-width:0;flex-shrink:1}.tag-row>.tag-pill>span{overflow-wrap:anywhere}

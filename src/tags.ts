@@ -4,6 +4,16 @@ export function tagStyle(tag:Tag) { return {background:`linear-gradient(135deg, 
 export function tagIds(value:unknown):string[] {
   return Array.isArray(value) ? [...new Set(value.filter((id):id is string=>typeof id==='string' && !!id))] : []
 }
+// The saved tag array is the shared display order; positions are one-based in settings.
+export function moveTag(tags:Tag[],id:string,position:number):Tag[] {
+  const from=tags.findIndex(tag=>tag.id===id)
+  if(from<0 || !Number.isInteger(position)) return tags
+  const to=Math.max(0,Math.min(tags.length-1,position-1))
+  if(from===to) return tags
+  const result=[...tags]
+  result.splice(to,0,result.splice(from,1)[0]!)
+  return result
+}
 export function loadTags():Tag[] {
   try {
     const data:unknown=JSON.parse(localStorage.getItem('ilslides.tags') || '[]')

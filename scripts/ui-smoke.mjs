@@ -30,7 +30,7 @@ await page.addInitScript(() => {
 async function native() { await page.evaluate(()=>window.Capacitor.isNativePlatform=()=>true) }
 async function photo(name) { await page.waitForFunction(name=>{const imgs=[...document.querySelectorAll('.main-photo')];return imgs.length===1 && imgs[0].alt===name && imgs[0].naturalWidth>0 && !imgs[0].className.includes('dissolve-')},name) }
 async function selection(name) { return page.getByRole('button',{name:`選取 ${name}`,exact:true}) }
-async function editCollection(name) { await page.getByRole('button',{name:`${name} 選項`}).click(); await page.getByRole('menuitem',{name:'編輯集合'}).click() }
+async function editCollection(name) { await page.getByRole('button',{name:`${name} 選項`}).click(); await page.getByRole('menuitem',{name:'編輯集合'}).click(); await page.getByRole('button',{name:'選擇圖片步驟'}).click() }
 await page.goto((process.env.APP_URL || 'http://127.0.0.1:5173')+'/#/collections')
 await native()
 await page.getByRole('button',{name:'開啟設定'}).click()

@@ -1,0 +1,97 @@
+import assert from 'node:assert/strict'
+import {createRequire} from 'node:module'
+const require=createRequire(import.meta.url)
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
+const browser=await chromium.launch({channel:'chrome',headless:true})
+const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true})
+const errors=[];page.on('pageerror',e=>errors.push(e.message))
+await page.addInitScript(()=>{
+ if(!localStorage.getItem('tag-order-seeded')) {
+  localStorage.setItem('ilslides.tags',JSON.stringify(['旅行','家人','生活'].map((name,i)=>({id:String(i),name,start:'#386fbc',end:'#8850bf'}))))
+  localStorage.setItem('ilslides.collections',JSON.stringify([{id:'saved',name:'排序測試',photos:[{uri:'content://one',name:'旅行.jpg'}],tagIds:['2','0','1']}]))
+  localStorage.setItem('tag-order-seeded','1')
+ }
+ const image='data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450"><rect width="600" height="450" fill="#325b83"/></svg>')
+ window.androidBridge={}
+ window.Capacitor={PluginHeaders:[{name:'App',methods:[{name:'addListener',rtype:'callback'},{name:'removeListener',rtype:'promise'}]},{name:'ImageFolders',methods:['image','list','coverCache','sourceState'].map(name=>({name,rtype:'promise'}))}],nativeCallback:()=> 'listener',nativePromise:async(plugin,method)=>{
+  if(plugin==='App' || method==='coverCache') return {}
+  if(method==='sourceState') return {status:'ok',signature:'1:100'}
+  if(method==='image') return {data:image}
+  if(method==='list') return {images:[]}
+  throw Error(method)
+ }}
+})
+const text=async locator=>(await locator.allTextContents()).map(value=>value.trim())
+const settingsOrder=()=>text(page.locator('.tag-list .tag-pill'))
+const cardOrder=()=>text(page.locator('.collection-card .collection-tags .tag-pill'))
+async function changePosition(name,value) {
+ const input=page.getByRole('spinbutton',{name:`標籤 ${name} 序位`,exact:true})
+ await input.fill(value);await input.press('Tab')
+}
+async function editSaved() {
+ await page.getByRole('button',{name:'排序測試 選項'}).click()
+ await page.getByRole('menuitem',{name:'編輯集合'}).click()
+ await page.getByRole('button',{name:'儲存變更 · 1 張'}).waitFor()
+ assert.equal(await page.getByLabel('集合名稱').inputValue(),'排序測試')
+ assert.equal(await page.locator('.editor-page').first().getAttribute('inert'),'')
+}
+try {
+ await page.goto((process.env.APP_URL || 'http://127.0.0.1:5173')+'/#/home')
+ assert.deepEqual(await cardOrder(),['旅行','家人','生活'],'Cards must use global order rather than selection order')
+ await page.getByRole('button',{name:'開啟設定',exact:true}).click()
+ await changePosition('生活','1')
+ assert.deepEqual(await settingsOrder(),['生活','旅行','家人'])
+ assert.deepEqual(await page.locator('.tag-position input').evaluateAll(inputs=>inputs.map(input=>input.value)),['1','2','3'])
+ await changePosition('旅行','')
+ assert.equal(await page.getByRole('spinbutton',{name:'標籤 旅行 序位',exact:true}).inputValue(),'2')
+ await changePosition('旅行','1.5')
+ assert.equal(await page.getByRole('spinbutton',{name:'標籤 旅行 序位',exact:true}).inputValue(),'2')
+ await changePosition('生活','99')
+ assert.deepEqual(await settingsOrder(),['旅行','家人','生活'])
+ await changePosition('生活','0')
+ assert.deepEqual(await settingsOrder(),['生活','旅行','家人'])
+ await page.reload()
+ assert.deepEqual(await settingsOrder(),['生活','旅行','家人'],'Order must persist across reload')
+ await page.getByRole('button',{name:'首頁',exact:true}).click()
+ assert.deepEqual(await cardOrder(),['生活','旅行','家人'])
+ await page.getByRole('button',{name:'集合',exact:true}).click()
+ assert.deepEqual(await cardOrder(),['生活','旅行','家人'])
+ await page.getByRole('button',{name:'篩選與排序',exact:true}).click()
+ assert.deepEqual(await text(page.locator('#collection-filter .tag-pill')),['生活','旅行','家人'])
+ await page.getByRole('button',{name:'關閉篩選'}).click()
+ await editSaved()
+ assert.deepEqual(await text(page.locator('.editor-page .tag-picker .tag-pill')),['生活','旅行','家人'])
+ assert.equal(await page.locator('.editor-page .tag-picker [aria-pressed="true"]').count(),3)
+ await page.getByRole('button',{name:'選擇封面與調整視窗'}).click()
+ await page.getByRole('button',{name:'取消封面調整'}).click()
+ await page.getByRole('button',{name:'選擇圖片步驟'}).click()
+ await page.getByRole('button',{name:'下一步',exact:true}).click()
+ await page.getByRole('button',{name:'儲存變更 · 1 張'}).click()
+ assert.deepEqual(await cardOrder(),['生活','旅行','家人'])
+ await page.getByRole('button',{name:'開啟 排序測試',exact:true}).click()
+ await page.getByRole('button',{name:'編輯集合',exact:true}).click()
+ await page.getByRole('button',{name:'儲存變更 · 1 張'}).waitFor()
+ await page.getByRole('button',{name:'關閉',exact:true}).click()
+ await page.getByRole('button',{name:'返回集合',exact:true}).click()
+ await page.getByRole('button',{name:'新增集合',exact:true}).click()
+ await page.getByRole('button',{name:'下一步',exact:true}).waitFor()
+ await page.getByRole('button',{name:'下一步',exact:true}).click()
+ assert.deepEqual(await text(page.locator('.editor-page .tag-picker .tag-pill')),['生活','旅行','家人'])
+ await page.getByRole('button',{name:'關閉',exact:true}).click()
+ await page.getByRole('button',{name:'開啟設定',exact:true}).click()
+ await page.getByLabel('新增標籤名稱').fill('新標籤')
+ await page.getByRole('button',{name:'新增標籤',exact:true}).click()
+ assert.deepEqual(await settingsOrder(),['生活','旅行','家人','新標籤'])
+ await page.getByRole('button',{name:'編輯標籤 旅行',exact:true}).click()
+ await page.getByLabel('修改標籤名稱').fill('旅途')
+ await page.getByRole('button',{name:'儲存標籤',exact:true}).click()
+ assert.deepEqual(await settingsOrder(),['生活','旅途','家人','新標籤'])
+ await page.getByRole('button',{name:'刪除標籤 家人',exact:true}).click()
+ assert.deepEqual(await page.locator('.tag-position input').evaluateAll(inputs=>inputs.map(input=>input.value)),['1','2','3'])
+ await page.setViewportSize({width:320,height:740})
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
+ await page.locator('.tag-manager').scrollIntoViewIfNeeded()
+ await page.screenshot({path:'release/tag-order-settings.png'})
+ assert.deepEqual(errors,[])
+ console.log('PASS: edit opens details; global tag positions persist across settings/home/collections/picker/filter; invalid positions, create/edit/delete and mobile layout')
+} finally {await browser.close()}

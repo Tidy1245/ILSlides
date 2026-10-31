@@ -37,7 +37,7 @@ const selectedStrip=ref<InstanceType<typeof SelectedPhotos>>()
 const tags=ref(loadTags())
 const draftTags=ref<string[]>([]),coverEpoch=ref(0),cacheBusy=ref(false),cacheMessage=ref('')
 watch(tags,value=>{try {localStorage.setItem('ilslides.tags',JSON.stringify(value))} catch {error.value='標籤無法保存。'}},{deep:true})
-function collectionTags(c:Collection):Tag[] {return (c.tagIds || []).map(id=>tags.value.find(t=>t.id===id)).filter((t):t is Tag=>!!t)}
+function collectionTags(c:Collection):Tag[] {return tags.value.filter(tag=>c.tagIds?.includes(tag.id))}
 function toggleTag(id:string) {draftTags.value=draftTags.value.includes(id) ? draftTags.value.filter(v=>v!==id) : [...draftTags.value,id]}
 function removeTag(id:string) {
   tags.value=tags.value.filter(t=>t.id!==id)
@@ -196,7 +196,7 @@ function edit(c?:Collection, folder?:SourceFolder) {
   menuCollectionId.value=null
   editId.value=c?.id || null; name.value=c?.name || ''; draftPhotos.value=c ? [...c.photos] : []
   draftTags.value=(c?.tagIds || []).filter(id=>tags.value.some(t=>t.id===id))
-  draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false; editorScrolled.value=false; editorStep.value=0; editorTouch=undefined
+  draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false; editorScrolled.value=false; editorStep.value=c ? 1 : 0; editorTouch=undefined
   selectedFolder.value=null; folderPhotos.value=[];folderQuery.value='';photoSortOpen.value=false; modal.value=true; error.value=''
   const initial=folder || folders.value[0]
   if(initial) void browseFolder(initial)
