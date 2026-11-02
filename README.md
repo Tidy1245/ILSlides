@@ -4,7 +4,7 @@
 
 ## 安裝
 
-前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-14.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
+前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-0-15.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
 
 ## 使用方式
 
@@ -69,12 +69,12 @@ npm run release:prepare -- 2.0.0 # 明確指定
 
 UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`、`node scripts/cache-tags-smoke.mjs`、`node scripts/zoom-smoke.mjs`、`node scripts/picker-reorder-smoke.mjs`、`node scripts/folder-settings-smoke.mjs`、`node scripts/folder-name-search-smoke.mjs`、`node scripts/home-menu-smoke.mjs`、`node scripts/editor-pages-smoke.mjs`、`node scripts/tag-order-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
 
-## 未發布更新
+## v1.0.15 驗證
 
 - 編輯集合預設開啟集合資訊頁；新增集合仍預設挑圖頁。
 - 設定頁可手動修改集合標籤序位，統一套用至首頁、集合、挑選標籤及篩選視窗，重開後保留。
 - 72 項單元測試與正式建置通過；新增序位輸入、跨頁一致性、保存及編輯初始頁的手機 UI 回歸。
-- 本次僅更新程式碼，版本維持 1.0.14，未發布 APK。
+- 版本 1.0.15／versionCode 16；發布驗證與實機限制見 [v1.0.15 發布說明](docs/release-v1.0.15.md)。
 
 ## v1.0.14 驗證
 
