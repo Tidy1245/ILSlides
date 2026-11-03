@@ -5,7 +5,7 @@ export type HomeMode='recent'|'recommended'
 export function recommendedCollectionIds(collections:Collection[],random=Math.random) {
  const focused=collections.filter(c=>c.focused)
  const first=focused.length ? focused[Math.floor(random()*focused.length)]!.id : undefined
- const ids=collections.filter(c=>c.id!==first).map(c=>c.id)
+ const ids=collections.filter(c=>!c.focused).map(c=>c.id)
  for(let i=0;i<Math.min(4,ids.length);i++) {
   const pick=i+Math.floor(random()*(ids.length-i))
   ;[ids[i],ids[pick]]=[ids[pick]!,ids[i]!]
