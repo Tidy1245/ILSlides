@@ -1,6 +1,12 @@
 import { describe,it,expect } from 'vitest'
 import { cropRect } from './cover'
 describe('封面裁切',()=>{
+ it('焦點圖片以 8:3 裁切且縮放拖曳維持來源範圍',()=>{
+  expect(cropRect(600,800,{x:.5,y:.5,zoom:1},8/3)).toEqual({x:0,y:287.5,width:600,height:225})
+  const crop=cropRect(1600,900,{x:1,y:1,zoom:2},8/3)
+  expect(crop.width/crop.height).toBe(8/3)
+  expect(crop.x+crop.width).toBe(1600);expect(crop.y+crop.height).toBe(900)
+ })
  it('直式圖片置中裁成 4:3',()=>{
   expect(cropRect(600,800,{x:.5,y:.5,zoom:1})).toEqual({x:0,y:175,width:600,height:450})
  })

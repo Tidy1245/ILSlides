@@ -4,6 +4,19 @@ import type { Collection } from './library'
 const rows=[{id:'b',name:'B',photos:[],createdAt:10,updatedAt:30},{id:'a',name:'A',photos:[],createdAt:30,updatedAt:10},{id:'c',name:'C',photos:[],createdAt:20,updatedAt:20}]
 beforeEach(()=>Object.assign(globalThis,{localStorage:{getItem:()=>null}}))
 describe('集合排序與轉場設定',()=>{
+ it('推薦首筆為隨機焦點，後續四筆不重複並可抽到其他焦點',()=>{
+  const many=Array.from({length:8},(_,i)=>({id:String(i),name:String(i),photos:[],focused:i===1 || i===7}))
+  expect(recommendedCollectionIds(many,()=>0)).toEqual(['1','0','2','3','4'])
+  const result=recommendedCollectionIds(many,()=>0.99)
+  expect(result[0]).toBe('7');expect(result).toHaveLength(5);expect(new Set(result).size).toBe(5)
+  expect(recommendedCollectionIds(many.slice(0,2),()=>0)).toEqual(['1','0'])
+ })
+ it('焦點篩選可與名稱及標籤共同套用',()=>{
+  const focused=[{...rows[0]!,focused:true,tagIds:['trip']},{...rows[1]!,focused:true},{...rows[2]!,tagIds:['trip']}]
+  expect(filterCollections(focused,'',[],true).map(c=>c.id)).toEqual(['b','a'])
+  expect(filterCollections(focused,'b',['trip'],true).map(c=>c.id)).toEqual(['b'])
+  expect(filterCollections(focused,'c',['trip'],true)).toEqual([])
+ })
  it('首頁推薦從所有集合抽四筆且不重複，集合不足四筆時全數顯示',()=>{
   const many=Array.from({length:8},(_,i)=>({id:String(i),name:String(i),photos:[]}))
   expect(recommendedCollectionIds(many,()=>0)).toEqual(['0','1','2','3'])

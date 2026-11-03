@@ -10,6 +10,12 @@ function setup(entry?:CachedCover) {
   return {backend,render,loader:new CoverLoader(backend,render)}
 }
 describe('封面快取與排程',()=>{
+  it('不同寬度的封面快取獨立，一般集合保留原快取鍵',()=>{
+    expect(coverKey({...collection,focused:false})).toBe(coverKey(collection))
+    expect(coverKey({...collection,focused:true})).not.toBe(coverKey(collection))
+    const custom={...collection,cover:{uri:'content://two',x:.5,y:.5,zoom:1}}
+    expect(coverKey({...custom,focused:true})).not.toBe(coverKey(custom))
+  })
   it('改名或標籤不使封面失效，換封面或裁切才改變識別',()=>{
     expect(coverKey({...collection,name:'新名稱',updatedAt:200,tagIds:['tag']})).toBe(coverKey(collection))
     expect(coverKey({...collection,photos:[...collection.photos,{uri:'third',name:'third'}]})).toBe(coverKey(collection))

@@ -6,6 +6,13 @@ beforeEach(() => {
  Object.assign(globalThis,{localStorage:{getItem:(key:string)=>storage.get(key) ?? null}})
 })
 describe('集合瀏覽', () => {
+ it('焦點與自訂封面保存後可載入，舊集合維持一般集合',()=>{
+  const cover={uri:'one',x:.2,y:.7,zoom:2}
+  storage.set('ilslides.collections',JSON.stringify([{id:'focus',name:'焦點',focused:true,photos:[{uri:'one',name:'one.jpg'}],cover},{id:'old',name:'舊集合',photos:[]}]))
+  const saved=loadCollections()
+  expect(saved[0]!.focused).toBe(true);expect(saved[0]!.cover).toEqual(cover)
+  expect(saved[1]!.focused).toBeUndefined();expect(saved[1]!.cover).toBeUndefined()
+ })
  it('按指定正則取空白或連字號前的檔名',()=>{
   expect(suggestCollectionName('旅行 001.jpg')).toBe('旅行')
   expect(suggestCollectionName('旅行-001.jpg')).toBe('旅行')

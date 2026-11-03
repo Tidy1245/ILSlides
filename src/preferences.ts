@@ -3,16 +3,18 @@ export type SortKey='name'|'createdAt'|'updatedAt'
 export type SortDirection='asc'|'desc'
 export type HomeMode='recent'|'recommended'
 export function recommendedCollectionIds(collections:Collection[],random=Math.random) {
- const ids=collections.map(c=>c.id)
+ const focused=collections.filter(c=>c.focused)
+ const first=focused.length ? focused[Math.floor(random()*focused.length)]!.id : undefined
+ const ids=collections.filter(c=>c.id!==first).map(c=>c.id)
  for(let i=0;i<Math.min(4,ids.length);i++) {
   const pick=i+Math.floor(random()*(ids.length-i))
   ;[ids[i],ids[pick]]=[ids[pick]!,ids[i]!]
  }
- return ids.slice(0,4)
+ return [...(first ? [first] : []),...ids.slice(0,4)]
 }
-export function filterCollections(collections:Collection[], query:string, tags:string[]) {
+export function filterCollections(collections:Collection[], query:string, tags:string[],focusedOnly=false) {
  const name=query.trim().toLocaleLowerCase()
- return collections.filter(c=>c.name.toLocaleLowerCase().includes(name) && (!tags.length || tags.some(id=>c.tagIds?.includes(id))))
+ return collections.filter(c=>(!focusedOnly || c.focused) && c.name.toLocaleLowerCase().includes(name) && (!tags.length || tags.some(id=>c.tagIds?.includes(id))))
 }
 export function sortCollections(collections:Collection[], key:SortKey, direction:SortDirection) {
  const sign=direction==='asc' ? 1 : -1

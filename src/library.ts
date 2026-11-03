@@ -3,7 +3,7 @@ import { tagIds } from './tags'
 import { registerPlugin } from '@capacitor/core'
 export interface Photo { uri: string; name: string; modifiedAt?:number; folderName?:string; folderPath?:string }
 export interface SourceFolder { uri: string; name: string }
-export interface Collection { id: string; name: string; photos: Photo[]; legacyTree?: string; cover?:CoverSettings; tagIds?:string[]; createdAt?:number; updatedAt?:number }
+export interface Collection { id: string; name: string; photos: Photo[]; legacyTree?: string; cover?:CoverSettings; focused?:boolean; tagIds?:string[]; createdAt?:number; updatedAt?:number }
 export interface CachedCover { uri:string; sourceUri:string; signature:string; createdAt:number }
 export interface SourceState { status:'ok'|'missing'|'denied'|'unknown'; signature:string }
 export const Folders = registerPlugin<{
@@ -36,6 +36,7 @@ export function loadCollections(): Collection[] {
   return read('ilslides.collections').filter((c:any) => c && typeof c.id==='string' && typeof c.name==='string').map((c:any) => ({
     id:c.id, name:c.name, ...(Number.isFinite(c.createdAt) && c.createdAt>0 ? {createdAt:c.createdAt} : {}), ...(Number.isFinite(c.updatedAt) && c.updatedAt>0 ? {updatedAt:c.updatedAt} : {}), ...((c.cover && typeof c.cover.uri === 'string' && [c.cover.x,c.cover.y,c.cover.zoom].every(Number.isFinite) && Array.isArray(c.photos) && c.photos.some((p:any)=>p?.uri===c.cover.uri)) ? {cover:c.cover} : {}), photos:Array.isArray(c.photos) ? uniquePhotos(c.photos.filter(validPhoto)) : [],
     ...(tagIds(c.tagIds).length ? {tagIds:tagIds(c.tagIds)} : {}),
+    ...(c.focused===true ? {focused:true} : {}),
     ...((c.legacyTree || (!Array.isArray(c.photos) && c.tree)) ? {legacyTree:c.legacyTree || c.tree} : {})
   }))
 }

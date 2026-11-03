@@ -2,7 +2,7 @@
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
-import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, Trash2, ChevronRight, ArrowUp, Grid2X2, Check, Search, Settings, Home, Funnel, Ellipsis, ArrowLeftRight } from 'lucide-vue-next'
+import { Plus, ArrowLeft, ArrowRight, FolderOpen, Images, X, Pencil, Trash2, ChevronRight, ArrowUp, Grid2X2, Check, Search, Settings, Home, Funnel, Ellipsis, ArrowLeftRight, TriangleAlert, CircleCheck } from 'lucide-vue-next'
 import { Folders, loadCollections, loadFolders, uniquePhotos, suggestCollectionName, sortedPhotos, nextIndex, type Collection, type Photo, type SourceFolder } from './library'
 import PhotoThumb from './PhotoThumb.vue'
 import CoverEditor from './CoverEditor.vue'
@@ -62,24 +62,29 @@ function changedHash() { page.value=hashPage(); window.scrollTo(0,0) }
 const preferences = ref(loadPreferences())
 watch(preferences,value=>{ try {localStorage.setItem('ilslides.preferences',JSON.stringify(value))} catch {error.value='設定無法保存。'} },{deep:true})
 const recommendedIds=ref(recommendedCollectionIds(collections.value))
-watch(()=>collections.value.map(c=>c.id).join('\0'),()=>{recommendedIds.value=recommendedCollectionIds(collections.value)})
+watch(()=>collections.value.map(c=>`${c.id}:${!!c.focused}`).join('\0'),()=>{recommendedIds.value=recommendedCollectionIds(collections.value)})
 function toggleHomeMode() {
  preferences.value.homeMode=preferences.value.homeMode==='recent' ? 'recommended' : 'recent'
  if(preferences.value.homeMode==='recommended') recommendedIds.value=recommendedCollectionIds(collections.value)
 }
 const query = ref('')
 const filterOpen=ref(false),filterTags=ref<string[]>([])
-function applyFilter(value:{tags:string[];sortKey:typeof preferences.value.sortKey;sortDirection:typeof preferences.value.sortDirection}) {
+const filterFocused=ref(false)
+const filterCount=computed(()=>filterTags.value.length+Number(filterFocused.value))
+function applyFilter(value:{tags:string[];sortKey:typeof preferences.value.sortKey;sortDirection:typeof preferences.value.sortDirection;focusedOnly:boolean}) {
   preferences.value.sortKey=value.sortKey;preferences.value.sortDirection=value.sortDirection
-  filterTags.value=value.tags;filterOpen.value=false
+  filterTags.value=value.tags;filterFocused.value=value.focusedOnly;filterOpen.value=false
   window.scrollTo(0,0)
 }
-const filteredCollections = computed(() => sortCollections(filterCollections(collections.value,query.value,filterTags.value),preferences.value.sortKey,preferences.value.sortDirection))
+const filteredCollections = computed(() => sortCollections(filterCollections(collections.value,query.value,filterTags.value,filterFocused.value),preferences.value.sortKey,preferences.value.sortDirection))
 const visibleCollections = computed(() => page.value==='home' ? (preferences.value.homeMode==='recommended' ? recommendedIds.value.map(id=>collections.value.find(c=>c.id===id)).filter((c):c is Collection=>!!c) : sortCollections(collections.value,'updatedAt','desc').slice(0,4)) : filteredCollections.value)
 const menuCollectionId=ref<string|null>(null)
 const deleteTarget=ref<Collection|null>(null)
 function closeCollectionMenu(e:PointerEvent) { if(!(e.target instanceof Element) || !e.target.closest('.card-menu')) menuCollectionId.value=null }
-const draftCover = ref<CoverSettings>()
+const draftFocused=ref(false)
+const draftCovers=ref<{normal?:CoverSettings;focus?:CoverSettings}>({})
+const draftCover=computed({get:()=>draftCovers.value[draftFocused.value ? 'focus' : 'normal'],set:(cover:CoverSettings|undefined)=>{draftCovers.value[draftFocused.value ? 'focus' : 'normal']=cover}})
+const draftCoverConfigured=computed(()=>!!draftCover.value && selected(draftCover.value.uri))
 const coverEditor = ref(false)
 const busy = ref(false)
 const error = ref('')
@@ -194,6 +199,7 @@ function step(delta:number) { if(photos.value.length > 1) { viewport.value?.canc
 function toggleControls() { controls.value=!controls.value }
 function edit(c?:Collection, folder?:SourceFolder) {
   menuCollectionId.value=null
+  draftCovers.value={};draftFocused.value=!!c?.focused
   editId.value=c?.id || null; name.value=c?.name || ''; draftPhotos.value=c ? [...c.photos] : []
   draftTags.value=(c?.tagIds || []).filter(id=>tags.value.some(t=>t.id===id))
   draftCover.value=c?.cover ? {...c.cover} : undefined; coverEditor.value=false; editorScrolled.value=false; editorStep.value=c ? 1 : 0; editorTouch=undefined
@@ -229,7 +235,7 @@ async function save() {
   if(!collectionName.value || !draftPhotos.value.length || busy.value) return
   const existing=collections.value.find(c=>c.id===editId.value)
   const now=Date.now()
-  const c:Collection={createdAt:existing ? existing.createdAt : now,updatedAt:now,id:editId.value || crypto.randomUUID(),name:collectionName.value,tagIds:[...draftTags.value],photos:uniquePhotos(draftPhotos.value),...(draftCover.value && selected(draftCover.value.uri) ? {cover:{...draftCover.value}} : {})}
+  const c:Collection={createdAt:existing ? existing.createdAt : now,updatedAt:now,id:editId.value || crypto.randomUUID(),name:collectionName.value,tagIds:[...draftTags.value],focused:draftFocused.value,photos:uniquePhotos(draftPhotos.value),...(draftCover.value && selected(draftCover.value.uri) ? {cover:{...draftCover.value}} : {})}
   const pos=collections.value.findIndex(v=>v.id===c.id)
   if(pos<0) collections.value.push(c); else collections.value[pos]=c
   modal.value=false; ++folderRequest
@@ -271,11 +277,11 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
     <template v-else>
     <section v-if="page==='home'" class="stats"><div><strong>{{ collections.length.toString().padStart(2,'0') }}</strong><span>圖片集合</span></div><div class="stat-divider"></div><div><strong>{{ total.toLocaleString() }}</strong><span>張照片</span></div><span class="offline"><span></span>僅在裝置上讀取</span></section>
     <section v-if="page==='collections'" class="source-section"><div class="source-heading"><span><FolderOpen :size="15" />常用資料夾</span><button @click="edit()">管理／挑選圖片<ChevronRight :size="15" /></button></div><div class="folder-chips"><button v-for="f in folders" :key="f.uri" @click="edit(undefined,f)"><FolderOpen :size="14" />{{ f.name }}</button><button v-if="!folders.length" @click="navigate('settings')"><Plus :size="14" />到設定授權資料夾</button></div></section>
-    <div class="section-heading"><div><h2><button v-if="page==='home'" class="home-mode-toggle" :aria-label="`切換至${preferences.homeMode==='recent' ? '為你推薦' : '最近的集合'}`" @click="toggleHomeMode">{{ preferences.homeMode==='recent' ? '最近的集合' : '為你推薦' }}<ArrowLeftRight :size="15" /></button><template v-else>我的集合</template> <span>{{ collections.length }}</span></h2><p>{{ page==='home' ? (preferences.homeMode==='recent' ? '最近修改的 4 筆集合' : '從所有集合隨機挑選 4 筆') : '挑選喜歡的照片，組成你的故事' }}</p></div><button v-if="page==='collections'" class="add-button" @click="edit()"><Plus :size="18" />新增集合</button><button v-else class="add-button" @click="navigate('collections')">查看全部<ChevronRight :size="18" /></button></div>
-    <div v-if="page==='collections'" class="collection-search-row"><div class="collection-search"><Search :size="18" /><input v-model="query" type="search" aria-label="搜尋集合" placeholder="搜尋集合名稱" /><button v-if="query" @click="query=''" aria-label="清除搜尋"><X :size="18" /></button></div><button class="filter-button" :class="{active:filterTags.length}" aria-label="篩選與排序" aria-haspopup="dialog" aria-controls="collection-filter" :aria-expanded="filterOpen" @click="filterOpen=true"><Funnel :size="21" /><span v-if="filterTags.length" aria-hidden="true">{{ filterTags.length }}</span></button></div>
-    <p v-if="page==='collections' && collections.length && !filteredCollections.length" class="search-empty">{{ query.trim() ? '找不到符合「'+query+'」'+(filterTags.length ? '及目前篩選條件' : '')+'的集合。' : '沒有符合所選標籤的集合。' }}</p>
+    <div class="section-heading"><div><h2><button v-if="page==='home'" class="home-mode-toggle" :aria-label="`切換至${preferences.homeMode==='recent' ? '為你推薦' : '最近的集合'}`" @click="toggleHomeMode">{{ preferences.homeMode==='recent' ? '最近的集合' : '為你推薦' }}<ArrowLeftRight :size="15" /></button><template v-else>我的集合</template> <span>{{ collections.length }}</span></h2><p>{{ page==='home' ? (preferences.homeMode==='recent' ? '最近修改的 4 筆集合' : (collections.some(c=>c.focused) ? '隨機焦點集合＋4 筆推薦' : '從所有集合隨機挑選 4 筆')) : '挑選喜歡的照片，組成你的故事' }}</p></div><button v-if="page==='collections'" class="add-button" @click="edit()"><Plus :size="18" />新增集合</button><button v-else class="add-button" @click="navigate('collections')">查看全部<ChevronRight :size="18" /></button></div>
+    <div v-if="page==='collections'" class="collection-search-row"><div class="collection-search"><Search :size="18" /><input v-model="query" type="search" aria-label="搜尋集合" placeholder="搜尋集合名稱" /><button v-if="query" @click="query=''" aria-label="清除搜尋"><X :size="18" /></button></div><button class="filter-button" :class="{active:filterCount}" aria-label="篩選與排序" aria-haspopup="dialog" aria-controls="collection-filter" :aria-expanded="filterOpen" @click="filterOpen=true"><Funnel :size="21" /><span v-if="filterCount" aria-hidden="true">{{ filterCount }}</span></button></div>
+    <p v-if="page==='collections' && collections.length && !filteredCollections.length" class="search-empty">{{ query.trim() ? '找不到符合「'+query+'」'+(filterCount ? '及目前篩選條件' : '')+'的集合。' : (filterFocused ? '沒有符合目前篩選條件的集合。' : '沒有符合所選標籤的集合。') }}</p>
     <section v-if="collections.length" class="collection-grid">
-      <article v-for="(c,i) in visibleCollections" :key="c.id" class="collection-card">
+      <article v-for="(c,i) in visibleCollections" :key="c.id" class="collection-card" :class="{focused:c.focused}">
         <button class="card-open" @click="open(c)" :disabled="busy" :aria-label="`開啟 ${c.name}`"><CollectionCover :key="c.id+':'+coverEpoch" :collection="c" :class="`cover-${i%3}`"><span class="photo-count"><Images :size="13" />{{ c.photos.length }} 張</span><span class="open-indicator"><ChevronRight :size="20" /></span></CollectionCover><div class="card-copy"><h3>{{ c.name }}</h3><div class="collection-tags"><span v-for="tag in collectionTags(c)" :key="tag.id" class="tag-pill" :style="tagStyle(tag)"><span>{{ tag.name }}</span></span></div></div></button>
         <div v-if="page==='collections'" class="card-menu"><button class="card-edit icon-button" @click="menuCollectionId=menuCollectionId===c.id ? null : c.id" :aria-label="`${c.name} 選項`" aria-haspopup="menu" :aria-expanded="menuCollectionId===c.id"><Ellipsis :size="21" /></button><div v-if="menuCollectionId===c.id" class="card-menu-panel" role="menu"><button role="menuitem" @click="edit(c)"><Pencil :size="15" />編輯集合</button><button role="menuitem" @click="menuCollectionId=null;deleteTarget=c"><Trash2 :size="15" />刪除集合</button></div></div>
       </article>
@@ -292,7 +298,7 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
   </main>
   <div v-if="error" class="toast" role="alert"><span>{{ error }}</span><button @click="error=''" aria-label="關閉訊息"><X :size="18" /></button></div>
   <div v-if="modal" class="modal-backdrop" @click.self="modal=false">
-    <section class="sheet collection-sheet" :inert="photoSortOpen" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <section class="sheet collection-sheet" :inert="photoSortOpen || coverEditor" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
       <div class="sheet-handle"></div><div class="sheet-heading"><div><span class="eyebrow">CURATE YOUR COLLECTION</span><h2 id="sheet-title">{{ editId ? '編輯集合' : '建立新的集合' }}</h2></div><button class="icon-button" @click="modal=false" aria-label="關閉"><X :size="21" /></button></div>
       <div class="editor-steps" aria-label="集合編輯步驟"><button :class="{current:editorStep===0}" :aria-current="editorStep===0 ? 'step' : undefined" aria-label="選擇圖片步驟" @click="showEditorStep(0)">1　選擇圖片</button><button :class="{current:editorStep===1}" :aria-current="editorStep===1 ? 'step' : undefined" aria-label="集合資訊步驟" @click="showEditorStep(1)">2　集合資訊</button></div>
       <div class="editor-scroll-wrap"><div class="editor-pages" :class="{details:editorStep===1}" @touchstart.passive="startEditorSwipe" @touchmove="moveEditorSwipe" @touchend.passive="endEditorSwipe" @touchcancel="editorTouch=undefined">
@@ -314,14 +320,15 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
         <label class="field-label">集合標籤</label>
         <div v-if="tags.length" class="tag-picker"><button v-for="tag in tags" :key="tag.id" class="tag-pill" :class="{chosen:draftTags.includes(tag.id)}" :style="tagStyle(tag)" :aria-label="'套用標籤 '+tag.name" :aria-pressed="draftTags.includes(tag.id)" @click="toggleTag(tag.id)"><span><Check v-if="draftTags.includes(tag.id)" :size="13" />{{ tag.name }}</span></button></div>
         <p v-else class="tag-hint">可先至設定頁建立標籤。</p>
-        <label class="field-label">集合封面</label><button class="folder-select" :disabled="!draftPhotos.length" @click="coverEditor=true"><Images :size="23" /><span><strong>{{ draftCover && selected(draftCover.uri) ? '調整已選封面' : '選擇封面與調整視窗' }}</strong><small>從集合圖片挑選，拖曳及縮放封面範圍</small></span><ChevronRight :size="18" /></button>
+        <label class="field-label">集合封面</label><button class="folder-select" :disabled="!draftPhotos.length" @click="coverEditor=true"><Images :size="23" /><span><strong>{{ draftCoverConfigured ? '調整已選封面' : '選擇封面與調整視窗' }}</strong><small>從集合圖片挑選，拖曳及縮放封面範圍</small></span><span class="cover-status" :class="{configured:draftCoverConfigured}" role="status" :aria-label="draftCoverConfigured ? '封面已設定' : '封面未設定'"><CircleCheck v-if="draftCoverConfigured" :size="24" /><TriangleAlert v-else :size="24" /></span><ChevronRight :size="18" /></button>
+        <label class="focus-checkbox"><input v-model="draftFocused" type="checkbox" aria-label="焦點集合" /><span>焦點集合<small>以兩倍寬度顯示，使用較寬的封面比例</small></span></label>
       </div></div>
       <button v-if="editorScrolled" class="editor-top-button" @click="editorTop" :aria-label="editId ? '回到編輯集合頂部' : '回到新增集合頂部'"><ArrowUp :size="22" /></button></div>
       <button class="primary save-button" :disabled="editorStep===1 && (!collectionName || !draftPhotos.length || busy)" @click="editorStep===0 ? showEditorStep(1) : save()">{{ editorStep===0 ? '下一步' : (editId ? '儲存變更' : '建立集合') + ' · ' + draftPhotos.length + ' 張' }}<ArrowRight :size="18" /></button>
     </section>
   </div>
   <CollectionFilter v-if="photoSortOpen" photos :tags="[]" :selected="[]" :sort-key="preferences.photoSortKey" :sort-direction="preferences.photoSortDirection" @close="photoSortOpen=false" @apply="applyPhotoSort" />
-  <CollectionFilter v-if="filterOpen" :tags="tags" :selected="filterTags" :sort-key="preferences.sortKey" :sort-direction="preferences.sortDirection" @close="filterOpen=false" @apply="applyFilter" />
-  <CoverEditor v-if="coverEditor && draftPhotos.length" :photos="draftPhotos" :initial="draftCover && selected(draftCover.uri) ? draftCover : undefined" @close="coverEditor=false" @save="draftCover=$event; coverEditor=false" />
+  <CollectionFilter v-if="filterOpen" :tags="tags" :selected="filterTags" :focused-only="filterFocused" :sort-key="preferences.sortKey" :sort-direction="preferences.sortDirection" @close="filterOpen=false" @apply="applyFilter" />
+  <CoverEditor v-if="coverEditor && draftPhotos.length" :photos="draftPhotos" :focused="draftFocused" :initial="draftCover && selected(draftCover.uri) ? draftCover : undefined" @close="coverEditor=false" @save="draftCover=$event; coverEditor=false" />
   <div v-if="deleteTarget" class="modal-backdrop collection-delete-backdrop" @click.self="deleteTarget=null"><section class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-collection-title"><h2 id="delete-collection-title">刪除「{{ deleteTarget.name }}」？</h2><p>此集合會移除，原始圖片會保留。</p><div><button @click="deleteTarget=null">取消刪除</button><button class="danger" @click="remove">確定刪除</button></div></section></div>
 </template>

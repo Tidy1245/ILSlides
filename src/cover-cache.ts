@@ -5,7 +5,7 @@ import { drawCover } from './cover'
 const MAX_AGE=24*60*60*1000
 export function coverKey(c:Collection) {
   const crop=c.cover && c.photos.some(p=>p.uri===c.cover!.uri) ? c.cover : undefined
-  return JSON.stringify([1,c.id,crop ? [crop.uri,crop.x,crop.y,crop.zoom] : c.photos[0]?.uri || ''])
+  return JSON.stringify([1,c.id,crop ? [crop.uri,crop.x,crop.y,crop.zoom] : c.photos[0]?.uri || '',...(c.focused ? ['focus'] : [])])
 }
 export interface CoverBackend {
   get(key:string):Promise<CachedCover | undefined>
@@ -107,7 +107,7 @@ async function renderCover(c:Collection):Promise<RenderedCover> {
       let data=result.data
       if(candidate.crop) {
         const img=new Image(); img.src=data; await img.decode()
-        const canvas=document.createElement('canvas'); drawCover(canvas,img,candidate.crop)
+        const canvas=document.createElement('canvas'); drawCover(canvas,img,candidate.crop,c.focused ? 8/3 : 4/3)
         data=canvas.toDataURL('image/webp',.88)
       }
       return {data,sourceUri:candidate.uri,signature:state.signature}
