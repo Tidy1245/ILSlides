@@ -9,6 +9,7 @@ import CoverEditor from './CoverEditor.vue'
 import type { CoverSettings } from './cover'
 import CollectionCover from './CollectionCover.vue'
 import TagManager from './TagManager.vue'
+import SettingSection from './SettingSection.vue'
 import CollectionFilter from './CollectionFilter.vue'
 import PhotoViewport from './PhotoViewport.vue'
 import SelectedPhotos from './SelectedPhotos.vue'
@@ -55,7 +56,9 @@ async function refreshCovers() {
 type Page='home'|'collections'|'settings'
 function hashPage():Page { const route=location.hash.slice(2); return route==='collections' || route==='settings' ? route : 'home' }
 const page = ref<Page>(hashPage())
-watch(page,()=>{deletingFolder.value=null;menuCollectionId.value=null})
+const openSetting=ref<string|null>(null)
+function toggleSetting(id:string) {openSetting.value=openSetting.value===id ? null : id;deletingFolder.value=null}
+watch(page,()=>{deletingFolder.value=null;menuCollectionId.value=null;openSetting.value=null})
 let settingsReturn:Page='home'
 function navigate(next:Page) { if(next==='settings' && page.value!=='settings') settingsReturn=page.value; page.value=next; location.hash='/'+next; window.scrollTo(0,0) }
 function changedHash() { page.value=hashPage(); window.scrollTo(0,0) }
@@ -273,7 +276,34 @@ onUnmounted(() => { window.removeEventListener('keydown',keyboard); window.remov
 <template>
   <main v-if="!active" class="library" :inert="filterOpen || !!deleteTarget">
     <header class="topbar"><a class="brand" href="#/home" aria-label="ILSlides 首頁" @click.prevent="navigate('home')"><span class="brand-icon"><Images :size="21" /></span>ILSlides<span class="brand-dot"></span></a><button class="icon-button settings-button" @click="navigate('settings')" aria-label="開啟設定"><Settings :size="22" /></button></header>
-    <section v-if="page==='settings'" class="settings-page"><div class="settings-heading"><button class="icon-button" @click="navigate(settingsReturn)" aria-label="返回設定前頁面"><ArrowLeft :size="20" /></button><h1>設定</h1></div><section class="setting-card"><div class="setting-title"><Images :size="21" /><h2>圖片轉場動畫</h2></div><p>調整左右瀏覽時，淡入淡出的動畫時間。</p><div class="duration-label"><label for="transition-duration">動畫時間</label><output>{{ (preferences.transitionMs/1000).toFixed(2) }} 秒</output></div><input id="transition-duration" type="range" min="100" max="2000" step="20" :value="preferences.transitionMs" @input="preferences.transitionMs=transitionTime(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>0.10 秒 · 快速</span><span>2.00 秒 · 緩慢</span></div><button class="reset-setting" @click="preferences.transitionMs=360">恢復預設 0.36 秒</button><p class="setting-note">設定自動保存。裝置啟用減少動畫時，會優先依裝置設定顯示。</p></section><section class="setting-card folder-settings"><div class="setting-title"><FolderOpen :size="21" /><h2>圖片資料夾</h2></div><p>新增或重新授權圖片來源，包含所有子目錄中的圖片，再於集合中切換資料夾挑圖。</p><div v-if="folders.length" class="authorized-folders"><div v-for="folder in folders" :key="folder.uri"><div class="folder-setting-row"><FolderOpen :size="16" /><span>{{ folder.name }}</span><button class="icon-button folder-delete" :aria-label="`刪除資料夾 ${folder.name}`" @click="deletingFolder=folder.uri"><Trash2 :size="17" /></button></div><div v-if="deletingFolder===folder.uri" class="delete-confirm folder-delete-confirm"><p>確定刪除「{{ folder.name }}」資料夾捷徑？既有集合與原始圖片會保留。</p><button @click="deletingFolder=null">取消刪除資料夾</button><button class="danger" @click="removeFolder(folder)">確定刪除資料夾</button></div></div></div><p v-else class="tag-hint">尚未授權圖片資料夾。</p><button class="folder-select" @click="pick" :disabled="authorizationBusy"><FolderOpen :size="23" /><span><strong>{{ authorizationBusy ? '正在選擇資料夾…' : '選擇／重新授權資料夾' }}</strong><small>保存讀取授權，原始圖片不會修改</small></span><Plus :size="18" /></button></section><section class="setting-card zoom-setting"><div class="setting-title"><Images :size="21" /><h2>雙擊放大倍率</h2></div><p>雙擊圖片指定位置放大，再次雙擊恢復完整圖片。單指左右滑動切圖，兩指縮放或移動查看區域。</p><div class="duration-label"><label for="double-tap-scale">放大倍率</label><output>{{ preferences.doubleTapScale.toFixed(2) }}×</output></div><input id="double-tap-scale" type="range" min="1.5" max="4" step="0.25" :value="preferences.doubleTapScale" @input="preferences.doubleTapScale=doubleTapScale(Number(($event.target as HTMLInputElement).value))" /><div class="duration-scale"><span>1.50×</span><span>4.00×</span></div><button class="reset-setting" @click="preferences.doubleTapScale=2">恢復預設 2 倍</button><p class="setting-note">切換圖片保留倍率與查看位置；重新開啟集合時恢復完整圖片。</p></section><section class="setting-card auto-name-setting"><div class="setting-toggle-row"><div><h2>自動命名新集合</h2><p>名稱留空時，以第一張選取圖片的檔名命名。</p></div><button role="switch" aria-label="自動命名新集合" :aria-checked="preferences.autoName" :class="{enabled:preferences.autoName}" @click="preferences.autoName=!preferences.autoName"><span></span></button></div><p class="setting-note">規則 <code>^([^\s-]+)</code>：取第一個空白或「-」之前的字串；手動輸入名稱時優先使用手動名稱。</p></section><TagManager v-model:tags="tags" @remove="removeTag" /><section class="setting-card"><div class="setting-title"><h2>封面快取</h2></div><p>封面會保存於裝置，讓下次開啟更快。若圖片已變更，可清除快取並重新整理。</p><button class="reset-setting" :disabled="cacheBusy" @click="refreshCovers">{{ cacheBusy ? '正在清除…' : '重新整理封面' }}</button><p v-if="cacheMessage" role="status" class="setting-note">{{ cacheMessage }}</p></section><section class="setting-card version-card"><span>ILSlides 版本</span><strong>{{ version }}</strong></section></section>
+    <section v-if="page==='settings'" class="settings-page">
+      <div class="settings-heading"><button class="icon-button" @click="navigate(settingsReturn)" aria-label="返回設定前頁面"><ArrowLeft :size="20" /></button><h1>設定</h1></div>
+      <SettingSection setting-id="transition" title="圖片轉場動畫" :open="openSetting==='transition'" @toggle="toggleSetting('transition')">
+        <p>調整左右瀏覽時，淡入淡出的動畫時間。</p>
+        <div class="duration-label"><label for="transition-duration">動畫時間</label><output>{{ (preferences.transitionMs/1000).toFixed(2) }} 秒</output></div>
+        <input id="transition-duration" type="range" min="100" max="2000" step="20" :value="preferences.transitionMs" @input="preferences.transitionMs=transitionTime(Number(($event.target as HTMLInputElement).value))" />
+        <div class="duration-scale"><span>0.10 秒 · 快速</span><span>2.00 秒 · 緩慢</span></div><button class="reset-setting" @click="preferences.transitionMs=360">恢復預設 0.36 秒</button><p class="setting-note">設定自動保存。裝置啟用減少動畫時，會優先依裝置設定顯示。</p>
+      </SettingSection>
+      <SettingSection setting-id="folders" title="圖片資料夾" class="folder-settings" :open="openSetting==='folders'" @toggle="toggleSetting('folders')">
+        <p>新增或重新授權圖片來源，包含所有子目錄中的圖片，再於集合中切換資料夾挑圖。</p>
+        <div v-if="folders.length" class="authorized-folders"><div v-for="folder in folders" :key="folder.uri"><div class="folder-setting-row"><FolderOpen :size="16" /><span>{{ folder.name }}</span><button class="icon-button folder-delete" :aria-label="`刪除資料夾 ${folder.name}`" @click="deletingFolder=folder.uri"><Trash2 :size="17" /></button></div><div v-if="deletingFolder===folder.uri" class="delete-confirm folder-delete-confirm"><p>確定刪除「{{ folder.name }}」資料夾捷徑？既有集合與原始圖片會保留。</p><button @click="deletingFolder=null">取消刪除資料夾</button><button class="danger" @click="removeFolder(folder)">確定刪除資料夾</button></div></div></div><p v-else class="tag-hint">尚未授權圖片資料夾。</p>
+        <button class="folder-select" @click="pick" :disabled="authorizationBusy"><FolderOpen :size="23" /><span><strong>{{ authorizationBusy ? '正在選擇資料夾…' : '選擇／重新授權資料夾' }}</strong><small>保存讀取授權，原始圖片不會修改</small></span><Plus :size="18" /></button>
+      </SettingSection>
+      <SettingSection setting-id="zoom" title="雙擊放大倍率" class="zoom-setting" :open="openSetting==='zoom'" @toggle="toggleSetting('zoom')">
+        <p>雙擊圖片指定位置放大，再次雙擊恢復完整圖片。單指左右滑動切圖，兩指縮放或移動查看區域。</p>
+        <div class="duration-label"><label for="double-tap-scale">放大倍率</label><output>{{ preferences.doubleTapScale.toFixed(2) }}×</output></div><input id="double-tap-scale" type="range" min="1.5" max="4" step="0.25" :value="preferences.doubleTapScale" @input="preferences.doubleTapScale=doubleTapScale(Number(($event.target as HTMLInputElement).value))" />
+        <div class="duration-scale"><span>1.50×</span><span>4.00×</span></div><button class="reset-setting" @click="preferences.doubleTapScale=2">恢復預設 2 倍</button><p class="setting-note">切換圖片保留倍率與查看位置；重新開啟集合時恢復完整圖片。</p>
+      </SettingSection>
+      <SettingSection setting-id="auto-name" title="自動命名新集合" class="auto-name-setting" :open="openSetting==='auto-name'" @toggle="toggleSetting('auto-name')">
+        <template #control><div class="setting-toggle-row"><button role="switch" aria-label="自動命名新集合" :aria-checked="preferences.autoName" :class="{enabled:preferences.autoName}" @click="preferences.autoName=!preferences.autoName"><span></span></button></div></template>
+        <p>名稱留空時，以第一張選取圖片的檔名命名。</p><p class="setting-note">規則 <code>^([^\s-]+)</code>：取第一個空白或「-」之前的字串；手動輸入名稱時優先使用手動名稱。</p>
+      </SettingSection>
+      <SettingSection setting-id="tags" title="集合標籤" :open="openSetting==='tags'" @toggle="toggleSetting('tags')"><TagManager v-model:tags="tags" @remove="removeTag" /></SettingSection>
+      <SettingSection setting-id="cache" title="封面快取" :open="openSetting==='cache'" @toggle="toggleSetting('cache')">
+        <p>封面會保存於裝置，讓下次開啟更快。若圖片已變更，可清除快取並重新整理。</p><button class="reset-setting" :disabled="cacheBusy" @click="refreshCovers">{{ cacheBusy ? '正在清除…' : '重新整理封面' }}</button><p v-if="cacheMessage" role="status" class="setting-note">{{ cacheMessage }}</p>
+      </SettingSection>
+      <SettingSection setting-id="version" title="ILSlides 版本" :open="openSetting==='version'" @toggle="toggleSetting('version')"><div class="version-card"><span>目前版本</span><strong>{{ version }}</strong></div></SettingSection>
+    </section>
     <template v-else>
     <section v-if="page==='home'" class="stats"><div><strong>{{ collections.length.toString().padStart(2,'0') }}</strong><span>圖片集合</span></div><div class="stat-divider"></div><div><strong>{{ total.toLocaleString() }}</strong><span>張照片</span></div><span class="offline"><span></span>僅在裝置上讀取</span></section>
     <section v-if="page==='collections'" class="source-section"><div class="source-heading"><span><FolderOpen :size="15" />常用資料夾</span><button @click="edit()">管理／挑選圖片<ChevronRight :size="15" /></button></div><div class="folder-chips"><button v-for="f in folders" :key="f.uri" @click="edit(undefined,f)"><FolderOpen :size="14" />{{ f.name }}</button><button v-if="!folders.length" @click="navigate('settings')"><Plus :size="14" />到設定授權資料夾</button></div></section>

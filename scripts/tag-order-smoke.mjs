@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import {createRequire} from 'node:module'
+import {openSetting} from './settings-helpers.mjs'
 const require=createRequire(import.meta.url)
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const browser=await chromium.launch({channel:'chrome',headless:true})
@@ -39,6 +40,7 @@ try {
  await page.goto((process.env.APP_URL || 'http://127.0.0.1:5173')+'/#/home')
  assert.deepEqual(await cardOrder(),['旅行','家人','生活'],'Cards must use global order rather than selection order')
  await page.getByRole('button',{name:'開啟設定',exact:true}).click()
+ await openSetting(page,'集合標籤')
  await changePosition('生活','1')
  assert.deepEqual(await settingsOrder(),['生活','旅行','家人'])
  assert.deepEqual(await page.locator('.tag-position input').evaluateAll(inputs=>inputs.map(input=>input.value)),['1','2','3'])
@@ -51,6 +53,7 @@ try {
  await changePosition('生活','0')
  assert.deepEqual(await settingsOrder(),['生活','旅行','家人'])
  await page.reload()
+ await openSetting(page,'集合標籤')
  assert.deepEqual(await settingsOrder(),['生活','旅行','家人'],'Order must persist across reload')
  await page.getByRole('button',{name:'首頁',exact:true}).click()
  assert.deepEqual(await cardOrder(),['生活','旅行','家人'])
@@ -79,6 +82,7 @@ try {
  assert.deepEqual(await text(page.locator('.editor-page .tag-picker .tag-pill')),['生活','旅行','家人'])
  await page.getByRole('button',{name:'關閉',exact:true}).click()
  await page.getByRole('button',{name:'開啟設定',exact:true}).click()
+ await openSetting(page,'集合標籤')
  await page.getByLabel('新增標籤名稱').fill('新標籤')
  await page.getByRole('button',{name:'新增標籤',exact:true}).click()
  assert.deepEqual(await settingsOrder(),['生活','旅行','家人','新標籤'])

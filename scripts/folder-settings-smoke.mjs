@@ -1,4 +1,5 @@
 import {createRequire} from 'node:module'
+import {openSetting} from './settings-helpers.mjs'
 import assert from 'node:assert/strict'
 const require=createRequire(import.meta.url)
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
@@ -26,6 +27,7 @@ try {
  });
  const url=(process.env.APP_URL || 'http://127.0.0.1:5173');
  await page.goto(url+'/#/settings');
+ await openSetting(page,'圖片資料夾');
  const rows=page.locator('.authorized-folders>div');
  assert.equal(await rows.count(),2);
  const remove=()=>page.getByRole('button',{name:'刪除資料夾 相簿',exact:true});
@@ -49,12 +51,14 @@ try {
  await page.locator('.main-photo').first().waitFor();
  await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'開啟設定',exact:true}).click();
+ await openSetting(page,'圖片資料夾');
  await page.getByRole('button',{name:'刪除資料夾 另一個相簿',exact:true}).click();
  await page.getByRole('button',{name:'確定刪除資料夾',exact:true}).click();
  assert.equal(await rows.count(),0);
  await page.evaluate(()=>{const c=JSON.parse(localStorage.getItem('ilslides.collections'));c.push({id:'legacy',name:'舊集合',tree:'content://folder',folder:'相簿'});localStorage.setItem('ilslides.collections',JSON.stringify(c));});
  await page.reload();assert.equal(await rows.count(),0,'Deleted shortcuts must not reappear from legacy collections');
  await page.evaluate(()=>window.Capacitor.isNativePlatform=()=>true);
+ await openSetting(page,'圖片資料夾');
  await page.getByRole('button',{name:'選擇／重新授權資料夾'}).click();
  assert.equal(await rows.count(),1,'A deleted shortcut can be authorized again');
  await page.screenshot({path:'release/folder-settings.png',fullPage:true});

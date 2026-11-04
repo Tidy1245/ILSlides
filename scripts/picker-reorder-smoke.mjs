@@ -1,4 +1,5 @@
 import {createRequire} from 'node:module'
+import {openSetting} from './settings-helpers.mjs'
 import assert from 'node:assert/strict'
 const require=createRequire(import.meta.url)
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
@@ -32,6 +33,7 @@ try {
  await page.goto((process.env.APP_URL || 'http://127.0.0.1:5173')+'/#/collections')
  await page.evaluate(()=>window.Capacitor.isNativePlatform=()=>true)
  await page.getByRole('button',{name:'到設定授權資料夾',exact:true}).click()
+ await openSetting(page,'圖片資料夾')
  const authorize=page.getByRole('button',{name:'選擇／重新授權資料夾'})
  await authorize.click();await authorize.click()
  assert.equal(await page.locator('.authorized-folders>div').count(),1,'Reauthorization must not duplicate shortcuts')

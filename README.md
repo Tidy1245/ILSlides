@@ -4,7 +4,7 @@
 
 ## 安裝
 
-前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-1-1.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
+前往 [GitHub Releases](https://github.com/Tidy1245/ILSlides/releases/latest) 下載 **ILSlides1-1-2.apk**，支援 **Android 9（API 28）以上**。與 Video-Box 相同，提供 Capacitor debug 簽章 APK 直接安裝。
 
 ## 使用方式
 
@@ -18,7 +18,7 @@
 8. 點首頁「最近的集合」標題可切換「為你推薦」：有焦點集合時，首筆隨機選一個焦點，再從非焦點集合隨機挑選最多 4 筆且不重複（不足四筆時不以焦點補滿）；無焦點時維持最多 4 筆。再點可切回最近修改的最多 4 筆。App 會記住上次模式。
 9. 搜尋框右側漏斗按鈕開啟「篩選與排序」：依字母、建立日期、修改日期遞增／遞減排序並保存，可勾選「只顯示焦點集合」及複選標籤（符合任一所選標籤），與名稱搜尋共同套用。按套用才生效，關閉／返回取消草稿；可重設條件。
 10. 集合頁按 Android 系統返回鍵：尚未在頁面頂部時先回到頂部；已在頂部時退出 App。新增與編輯集合的捲動區離開頂部時，右下方顯示半透明回頂部按鈕。
-11. 頂部與底部導覽列固定；點頂部右側齒輪進入設定頁，版本號顯示在設定頁。滑桿調整圖片轉場 0.10～2.00 秒，預設 0.36 秒、自動保存。
+11. 頂部與底部導覽列固定；點頂部右側齒輪進入設定頁。各項目預設收合，只顯示標題；點擊展開，同時僅開啟一項。自動命名開關在收合時仍可直接操作。展開「ILSlides 版本」查看版本；展開「圖片轉場動畫」可用滑桿調整 0.10～2.00 秒，預設 0.36 秒、自動保存。
 12. 設定頁可調整雙擊放大倍率 1.50～4.00 倍、每格 0.25 倍，預設 2 倍，自動保存。切圖／淡入淡出保留倍率與相對查看位置，直橫圖依比例限位，螢幕旋轉後重新換算；重新開啟集合時恢復完整圖片。雙指操作必須全部放開後才接受下一次單指手勢。
 
 自動命名新集合預設啟用，可在設定頁停用。名稱留空時，儲存採第一張目前仍選取的圖片檔名，套用 `^([^\s-]+)`：例如 `旅行-001.jpg`、`旅行 001.jpg` → `旅行`。若檔名主體只有數字，例如 `蘋果/0.jpg`，則以所在目錄「蘋果」命名。其他檔名無空白或 `-` 時保留完整檔名（包含副檔名）。手動名稱優先，不會自動改名已有集合；無法匹配或停用時，需自行輸入名稱。
@@ -70,6 +70,15 @@ npm run release:prepare -- 2.0.0 # 明確指定
 此工具同步 package.json、package-lock.json、Android versionName，並遞增 Android versionCode。一般建置不改版號。更新 AGENTS.md 與發布說明後，建置 APK、提交推送 main，再建立 GitHub Release 上傳 `ILSlides<版號>.apk` 與 `SHA256SUMS.txt`。
 
 UI 測試：安裝 Playwright 後執行 `npm run dev` 與 `node scripts/ui-smoke.mjs`、`node scripts/cache-tags-smoke.mjs`、`node scripts/zoom-smoke.mjs`、`node scripts/picker-reorder-smoke.mjs`、`node scripts/folder-settings-smoke.mjs`、`node scripts/folder-name-search-smoke.mjs`、`node scripts/home-menu-smoke.mjs`、`node scripts/editor-pages-smoke.mjs`、`node scripts/tag-order-smoke.mjs`；可用 `PLAYWRIGHT_MODULE` 指定模組路徑，`APP_URL` 指定測試網址。原生 bridge 使用模擬資料。
+
+## v1.1.2 驗證
+
+- 設定預設收合、單項展開、獨立開關及重開保存通過手機尺寸流程驗證。可執行 `node scripts/settings-accordion-smoke.mjs` 驗證；既有設定流程使用 `scripts/settings-helpers.mjs` 開啟指定項目。
+- 驗證結果與實機限制見 [v1.1.2 發布說明](docs/release-v1.1.2.md)。
+
+| 預設收合 | 單項展開 |
+| --- | --- |
+| ![收合設定](docs/settings-collapsed.png) | ![展開設定](docs/settings-expanded.png) |
 
 ## v1.1.1 驗證
 

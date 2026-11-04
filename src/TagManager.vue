@@ -25,8 +25,7 @@ function reorder(tag:Tag,event:Event) {
 }
 </script>
 <template>
-  <section class="setting-card tag-manager">
-    <div class="setting-title"><h2>集合標籤</h2></div>
+  <div class="tag-manager">
     <p>建立自己的漸層標籤，再於新增或編輯集合時套用。調整序位後，所有頁面的標籤會依相同順序排列，設定自動保存。</p>
     <div v-if="tags.length" class="tag-list">
       <div v-for="(tag,index) in tags" :key="tag.id" class="tag-row">
@@ -45,5 +44,5 @@ function reorder(tag:Tag,event:Event) {
       <p v-if="message" class="tag-error" role="alert">{{ message }}</p>
       <div class="tag-actions"><button type="submit" class="primary"><Plus v-if="!editing" :size="16" />{{ editing ? '儲存標籤' : '新增標籤' }}</button><button v-if="editing" type="button" class="reset-setting" @click="reset">取消修改標籤</button></div>
     </form>
-  </section>
+  </div>
 </template>

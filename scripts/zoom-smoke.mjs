@@ -1,4 +1,5 @@
 import {createRequire} from 'node:module'
+import {openSetting} from './settings-helpers.mjs'
 const require=createRequire(import.meta.url)
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const browser=await chromium.launch({channel:'chrome',headless:true})
@@ -35,9 +36,11 @@ try {
   localStorage.setItem('ilslides.preferences',JSON.stringify({transitionMs:800}))
  })
  await page.reload();await page.getByRole('button',{name:'開啟設定',exact:true}).click()
+ await openSetting(page,'雙擊放大倍率')
  if(await page.getByLabel('放大倍率',{exact:true}).inputValue()!=='2')throw Error('Default double tap scale not 2')
  await page.getByLabel('放大倍率',{exact:true}).fill('3.25')
  await page.reload()
+ await openSetting(page,'雙擊放大倍率')
  if(await page.getByLabel('放大倍率',{exact:true}).inputValue()!=='3.25')throw Error('Zoom setting not persisted')
  await page.locator('.zoom-setting').evaluate(el=>scrollTo(0,el.getBoundingClientRect().top+scrollY-90))
  await page.screenshot({path:'docs/zoom-settings.png'})
@@ -50,6 +53,7 @@ try {
  await tap(200,420);await page.waitForFunction(()=>!document.querySelector('.viewer-header').classList.contains('hidden'))
  // Return to default scale for comparable viewports across the image sequence.
  await page.getByRole('button',{name:'返回集合',exact:true}).click();await page.getByRole('button',{name:'開啟設定',exact:true}).click()
+ await openSetting(page,'雙擊放大倍率')
  await page.getByRole('button',{name:'恢復預設 2 倍',exact:true}).click();await page.getByRole('button',{name:'集合',exact:true}).click()
  await page.getByRole('button',{name:'開啟 手勢測試',exact:true}).click();await photo('直式一')
  await doubleTap(290,280);await scale(2)
